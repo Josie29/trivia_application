@@ -3,11 +3,11 @@
 import os
 import time
 from dotenv import load_dotenv
-from live_stream_capture import LiveTwitchAudioCapture
-from streaming_transcription import StreamingTranscriber
-from question_extractor import QuestionExtractor  # Reuse from previous
-from excel_manager import TriviaExcelManager      # Reuse from previous
-from sliding_window_processor import SlidingWindowProcessor
+from .LiveTwitchAudioCatcher import LiveTwitchAudioCapture
+from .StreamingTranscriber import StreamingTranscriber
+from .QuestionExtractor import QuestionExtractor
+from .ExcelManager import TriviaExcelManager
+from .SlidingWindowProcessor import SlidingWindowProcessor
 
 class LiveTriviaAssistant:
     def __init__(self, twitch_channel_url):
