@@ -28,3 +28,7 @@ Thumbs.db
 
 # Whisper models cache
 ~/.cache/whisper/
+.env
+backend/.env
+*.pyc
+__pycache__/
