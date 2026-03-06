@@ -4,13 +4,18 @@
 Logging configuration for the application
 """
 import logging
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from config import Config
 from colorama import init, Fore, Style
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
+
+# Generate a shared session timestamp so both loggers use the same value
+_SESSION_TIMESTAMP = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter with colors for console output"""
@@ -33,8 +38,8 @@ class ColoredFormatter(logging.Formatter):
 def setup_transcription_logger():
     """Setup a dedicated logger for transcriptions.
     
-    Writes to a separate log file with a clean, readable format
-    intended for end-user reference (no log levels or module names).
+    Writes to a session-timestamped file in the transcriptions log folder
+    with a clean, readable format for end-user reference.
     """
     t_logger = logging.getLogger('Transcriptions')
     t_logger.setLevel(logging.INFO)
@@ -46,8 +51,16 @@ def setup_transcription_logger():
     # Prevent propagation to root logger
     t_logger.propagate = False
     
+    # Ensure directory exists
+    os.makedirs(Config.TRANSCRIPTION_LOG_DIR, exist_ok=True)
+    
+    log_file = os.path.join(
+        Config.TRANSCRIPTION_LOG_DIR,
+        f'transcription_{_SESSION_TIMESTAMP}.log'
+    )
+    
     # File handler — clean format: timestamp + transcription text
-    file_handler = logging.FileHandler(Config.TRANSCRIPTION_LOG_FILE)
+    file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(logging.INFO)
     file_formatter = logging.Formatter(
         '%(asctime)s\n%(message)s\n',
@@ -75,8 +88,16 @@ def setup_logger(name='TriviaAssistant'):
     )
     console_handler.setFormatter(console_formatter)
     
+    # Ensure directory exists
+    os.makedirs(Config.LOG_DIR, exist_ok=True)
+    
+    log_file = os.path.join(
+        Config.LOG_DIR,
+        f'app_{_SESSION_TIMESTAMP}.log'
+    )
+    
     # File handler
-    file_handler = logging.FileHandler(Config.LOG_FILE)
+    file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
