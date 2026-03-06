@@ -30,6 +30,35 @@ class ColoredFormatter(logging.Formatter):
             record.levelname = f"{self.COLORS[levelname]}{levelname}{Style.RESET_ALL}"
         return super().format(record)
 
+def setup_transcription_logger():
+    """Setup a dedicated logger for transcriptions.
+    
+    Writes to a separate log file with a clean, readable format
+    intended for end-user reference (no log levels or module names).
+    """
+    t_logger = logging.getLogger('Transcriptions')
+    t_logger.setLevel(logging.INFO)
+    
+    # Avoid adding duplicate handlers on repeated calls
+    if t_logger.handlers:
+        return t_logger
+    
+    # Prevent propagation to root logger
+    t_logger.propagate = False
+    
+    # File handler — clean format: timestamp + transcription text
+    file_handler = logging.FileHandler(Config.TRANSCRIPTION_LOG_FILE)
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter(
+        '%(asctime)s\n%(message)s\n',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+    t_logger.addHandler(file_handler)
+    
+    return t_logger
+
+
 def setup_logger(name='TriviaAssistant'):
     """Setup and return configured logger"""
     logger = logging.getLogger(name)

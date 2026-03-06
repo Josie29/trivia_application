@@ -4,6 +4,10 @@ import threading
 import time
 from collections import deque
 from datetime import datetime
+from utils.logger import setup_logger, setup_transcription_logger
+
+logger = setup_logger(__name__)
+transcription_logger = setup_transcription_logger()
 
 class SlidingWindowProcessor:
     def __init__(self, stream_capture, transcriber, extractor, excel_manager,
@@ -35,7 +39,7 @@ class SlidingWindowProcessor:
         self.is_processing = True
         self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
         self.processing_thread.start()
-        print("🎬 Started live stream processing")
+        logger.info("Started live stream processing")
     
     def _processing_loop(self):
         """Main processing loop - runs continuously"""
@@ -50,19 +54,19 @@ class SlidingWindowProcessor:
                     self._process_window()
                     last_process_time = current_time
                 except Exception as e:
-                    print(f"❌ Error processing window: {e}")
+                    logger.error(f"Error processing window: {e}")
             
             time.sleep(0.5)  # Small sleep to prevent busy waiting
     
     def _process_window(self):
         """Process one window of audio"""
-        print(f"\n⏳ Processing {self.window_duration}s audio window...")
+        logger.info(f"Processing {self.window_duration}s audio window...")
         
         # Get audio buffer from stream
         audio_buffer = self.stream_capture.get_audio_buffer(self.window_duration)
         
         if audio_buffer is None or len(audio_buffer) == 0:
-            print("⚠️  No audio data available")
+            logger.warning("No audio data available")
             return
         
         # Transcribe
@@ -74,11 +78,12 @@ class SlidingWindowProcessor:
             # Too short, probably just music or silence
             return
         
-        print(f"📝 Transcribed ({transcribe_time:.1f}s): {transcription[:80]}...")
+        logger.info(f"Transcribed ({transcribe_time:.1f}s): {transcription[:80]}...")
+        transcription_logger.info(transcription)
         
         # Check if this is a duplicate of recent transcription (repeated question)
         if self._is_duplicate_transcription(transcription):
-            print("⏭️  Duplicate transcription detected (skipping)")
+            logger.info("Duplicate transcription detected (skipping)")
             return
         
         self.recent_transcriptions.append(transcription)
@@ -88,21 +93,21 @@ class SlidingWindowProcessor:
         
         # Check if valid question was found
         if not question_info.get("question_text"):
-            print("   No question detected in this window")
+            logger.debug("No question detected in this window")
             return
         
-        print(f"✅ Question detected: {question_info['question_text'][:60]}...")
+        logger.info(f"Question detected: {question_info['question_text'][:60]}...")
         
         # Update hour if specified
         if question_info.get("hour_number"):
             if question_info["hour_number"] != self.current_hour:
                 self.current_hour = question_info["hour_number"]
                 self.question_count = 0
-                print(f"📍 Switched to Hour {self.current_hour}")
+                logger.info(f"Switched to Hour {self.current_hour}")
         
         # Check if this question was already saved
         if self._is_duplicate_question(question_info["question_text"]):
-            print("⏭️  Question already saved (skipping)")
+            logger.info("Question already saved (skipping)")
             return
         
         self.recent_questions.append(question_info["question_text"])
@@ -123,7 +128,7 @@ class SlidingWindowProcessor:
             is_picture_question=question_info.get("is_picture_question", False)
         )
         
-        print(f"💾 Saved: Hour {self.current_hour}, Question {q_num}")
+        logger.info(f"Saved: Hour {self.current_hour}, Question {q_num}")
     
     def _is_duplicate_transcription(self, new_transcription):
         """Check if this transcription is very similar to recent ones"""
@@ -165,10 +170,10 @@ class SlidingWindowProcessor:
         self.is_processing = False
         if self.processing_thread:
             self.processing_thread.join(timeout=5)
-        print("⏹️  Stopped processing")
+        logger.info("Stopped processing")
     
     def set_hour(self, hour_number):
         """Manually set current hour"""
         self.current_hour = hour_number
         self.question_count = 0
-        print(f"📍 Hour manually set to: {hour_number}")
+        logger.info(f"Hour manually set to: {hour_number}")

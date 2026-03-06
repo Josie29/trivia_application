@@ -40,7 +40,8 @@ class Config:
     
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-    LOG_FILE = "logs/trivia_assistant.log"
+    LOG_DIR = "logs/app"
+    TRANSCRIPTION_LOG_DIR = "logs/transcriptions"
     
     # Paths
     TEMP_AUDIO_DIR = "data/temp"
@@ -57,6 +58,7 @@ class Config:
         # Create directories if they don't exist
         os.makedirs("data", exist_ok=True)
         os.makedirs("data/temp", exist_ok=True)
-        os.makedirs("logs", exist_ok=True)
+        os.makedirs(cls.LOG_DIR, exist_ok=True)
+        os.makedirs(cls.TRANSCRIPTION_LOG_DIR, exist_ok=True)
         
         return True

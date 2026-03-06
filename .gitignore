@@ -20,7 +20,10 @@ __pycache__/
 # Data files
 data/trivia_questions.xlsx
 data/temp/*.wav
-logs/*.log
+
+# Logs (keep directory structure via .gitkeep)
+logs/app/*.log
+logs/transcriptions/*.log
 
 # OS
 .DS_Store
