@@ -1,4 +1,5 @@
-# Backend API only (no static frontend in image). Use GitHub Pages for the UI.
+# FastAPI backend + static frontend (same origin when run as one Web Service).
+# Render: Web Service, root Dockerfile, empty root directory.
 FROM python:3.12-slim-bookworm
 
 RUN apt-get update \
@@ -11,6 +12,8 @@ COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ /app/
+# api._frontend_dir() resolves parent.parent / "frontend" → /frontend in this image
+COPY frontend/ /frontend/
 
 ENV PYTHONUNBUFFERED=1
 # Render and others set PORT

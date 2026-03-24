@@ -52,24 +52,34 @@ _state = _SessionState()
 
 
 def _cors_allow_origins() -> list[str]:
-    """Origins allowed for browser cross-origin calls (e.g. GitHub Pages).
+    """Origins allowed for browser CORS (JSON POST and SSE preflight).
 
-    Merges local defaults with ``CORS_ORIGINS`` (comma-separated) from the environment.
+    Includes localhost, Render's public service URL when ``RENDER_EXTERNAL_URL`` is set
+    (injected by Render), and any extra origins from ``CORS_ORIGINS`` (comma-separated).
+    Origins must match the browser's ``Origin`` header exactly (scheme + host, no path;
+    no trailing slash).
 
     Returns:
         List of origin strings, no duplicates.
     """
-    defaults = [
+    seeds = [
         "http://127.0.0.1:8000",
         "http://localhost:8000",
     ]
+    render_public = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    if render_public:
+        seeds.append(render_public)
+
     extra_raw = os.getenv("CORS_ORIGINS", "").strip()
-    if not extra_raw:
-        return defaults
-    extra = [o.strip() for o in extra_raw.split(",") if o.strip()]
+    extras = (
+        [o.strip().rstrip("/") for o in extra_raw.split(",") if o.strip()]
+        if extra_raw
+        else []
+    )
+
     seen: set[str] = set()
     ordered: list[str] = []
-    for origin in defaults + extra:
+    for origin in seeds + extras:
         if origin not in seen:
             seen.add(origin)
             ordered.append(origin)

@@ -1,38 +1,12 @@
-# Deploy: GitHub Pages (frontend) + free backend
+# Deploy: Render (full web app)
 
-The UI is static files; the API is Python (FastAPI). Host them separately: **GitHub Pages** for `frontend/`, and a small **container-friendly** host for `backend/`.
-
----
-
-## 1. Frontend — GitHub Pages
-
-This repo includes a workflow that uploads [`frontend/`](frontend/) to GitHub Pages.
-
-1. Push to the `main` branch (or edit [`.github/workflows/deploy-frontend-pages.yml`](.github/workflows/deploy-frontend-pages.yml) if your default branch has another name).
-2. In the GitHub repo: **Settings → Pages → Build and deployment**.
-3. Under **Source**, choose **GitHub Actions** (not “Deploy from a branch”).
-4. Run the workflow once (push or **Actions → Deploy frontend to GitHub Pages → Run workflow**).
-
-Your site URL will look like:
-
-- User/org site: `https://<username>.github.io/<repo>/`  
-- The browser **Origin** for CORS is always `https://<username>.github.io` (no path).
-
-### Point the UI at your API
-
-Edit [`frontend/config.js`](frontend/config.js) **before** or **after** deploy:
-
-```javascript
-window.__TRIVIA_API_BASE__ = "https://your-backend-host.example.com";
-```
-
-Use the public **https** URL with **no trailing slash**. Commit and push so Pages picks it up.
+The Docker image runs **FastAPI** and serves the **static UI** from the same URL (same origin). Production path: one **[Render](https://render.com) Web Service** using the repo-root [`Dockerfile`](Dockerfile).
 
 ---
 
-## 2. Backend — recommended: [Render](https://render.com) (free tier)
+## 1. Render — Web Service
 
-**Why Render:** Free web service, connects to GitHub, supports **Docker**, and can install **FFmpeg** in the image. That matches this app better than a bare Python buildpack alone.
+**Why Render:** Free tier Web Service, GitHub connect, **Docker**, and **FFmpeg** in the image for Streamlink/audio.
 
 **Caveats (any free tier):**
 
@@ -40,47 +14,65 @@ Use the public **https** URL with **no trailing slash**. Commit and push so Page
 - **RAM** may be tight for Whisper; if the process OOMs, upgrade the instance or use a smaller `WHISPER_MODEL_SIZE`.
 - **Twitch** sometimes blocks or degrades traffic from cloud IPs; if streams fail, try another region or a home/VPS server.
 
-### Steps (Render)
+### Steps
 
 1. Create a **Web Service** from this repo.
-2. Set **Root Directory** empty; use the **Dockerfile** at the repository root ([`Dockerfile`](Dockerfile)).
-3. **Instance type:** Free (or paid if you need more RAM).
-4. Add environment variables:
-   - `OPENAI_API_KEY` — required
-   - `CORS_ORIGINS` — your GitHub Pages origin, e.g. `https://yourusername.github.io`  
-     (comma-separate multiple origins if needed)
-5. Deploy. Note the service URL (e.g. `https://trivia-api.onrender.com`).
-6. Put that URL into `frontend/config.js` as `__TRIVIA_API_BASE__`, commit, and let Pages redeploy.
+2. **Root Directory:** leave empty (repository root).
+3. **Dockerfile path:** default `Dockerfile` at the repo root.
+4. **Instance type:** Free (or paid if you need more RAM).
+5. **Environment variables** — see [table below](#render-environment-variables).
+6. Deploy. Open your service URL (e.g. `https://your-service.onrender.com`) — you should get the web UI; API routes stay under `/api/...` and `/health`.
 
-Render sets `PORT`; the Docker `CMD` already uses it. The API image does not bundle `frontend/` (by design).
+Keep [`frontend/config.js`](frontend/config.js) as `window.__TRIVIA_API_BASE__ = ""` when the UI is served from this same Web Service so `fetch` and `EventSource` stay on **https** with the same host (avoids mixed content and CORS mismatches).
+
+### Render environment variables
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `OPENAI_API_KEY` | **Yes** | Your OpenAI API key. Without it the API will not start. |
+| `RENDER_EXTERNAL_URL` | No (auto) | Render sets this to your service’s public **https** URL (e.g. `https://your-service.onrender.com`). The app adds it to CORS automatically—you do **not** need to create it manually. |
+| `CORS_ORIGINS` | Usually no | Comma-separated extra origins only if users open the UI on a **different** host than where the API runs (unusual for this setup). No spaces. Must match the browser `Origin` exactly (`https://…`, no trailing slash). If you add a **custom domain** in front of Render, add that origin here too when it differs from `RENDER_EXTERNAL_URL`. |
+| `WHISPER_MODEL_SIZE` | No | Default `base`. Use `tiny` or `small` on tight RAM (free tier). |
+| `WHISPER_DEVICE` | No | Default `cpu`. |
+| `WINDOW_DURATION` / `OVERLAP_DURATION` | No | Override processing window sizes (seconds). |
+| `LOG_LEVEL` | No | Default `INFO`. |
+| `TWITCH_CHANNEL_URL` | No | Only for CLI (`main.py`); the web UI sends the URL per request. |
+
+`PORT` is set by Render; the Docker `CMD` already uses it.
+
+### “SSL” or CORS errors in the browser
+
+1. **Default (UI + API on Render):** Use `__TRIVIA_API_BASE__ = ""` in [`frontend/config.js`](frontend/config.js). Do not point `config.js` at `http://…` while the page is `https://…` (mixed content is blocked).
+2. **Custom domain:** If visitors use `https://app.example.com` but `RENDER_EXTERNAL_URL` is still `https://*.onrender.com`, add `https://app.example.com` to `CORS_ORIGINS` so it matches the tab’s origin.
+3. After changing env vars on Render, **redeploy** or restart so the app picks them up.
 
 ### Health check
 
-Configure Render’s health check path to `/health` if the dashboard offers it.
+Set Render’s health check path to `/health` if the dashboard offers it.
 
 ---
 
-## 3. Alternatives (still free or cheap)
+## 2. Alternatives (still free or cheap)
 
 | Host | Notes |
-|------|--------|
-| **Fly.io** | Generous free allowance; you ship the same Dockerfile; slightly more CLI/setup than Render. |
-| **Google Cloud Run** | Free tier with limits; needs container + GCP account; cold starts. |
-| **Oracle Cloud “Always Free” ARM** | Powerful VM if you accept setup complexity; good when Twitch blocks smaller PaaS IPs. |
+|------|-------|
+| **Fly.io** | Same Dockerfile; slightly more CLI/setup than Render. |
+| **Google Cloud Run** | Container + GCP account; cold starts. |
+| **Oracle Cloud “Always Free” ARM** | Good when Twitch blocks smaller PaaS IPs. |
 
 ---
 
-## 4. Checklist
+## 3. Checklist
 
-- [ ] Backend deployed with HTTPS URL
-- [ ] `CORS_ORIGINS` includes `https://<you>.github.io` (exact origin the browser sends)
-- [ ] `frontend/config.js` has `__TRIVIA_API_BASE__` set to that backend URL (no trailing slash)
-- [ ] GitHub Pages enabled with **GitHub Actions** as source
-- [ ] Workflow ran successfully
+- [ ] Web Service built from root `Dockerfile` (includes `frontend/`)
+- [ ] `OPENAI_API_KEY` set on Render
+- [ ] `frontend/config.js` uses `__TRIVIA_API_BASE__ = ""`
+- [ ] Custom domain: add that `https://…` origin to `CORS_ORIGINS` if needed
+- [ ] Optional: `/health` configured as health check
 
 ---
 
-## 5. Local dev (unchanged)
+## 4. Local dev
 
 From `backend/`:
 
