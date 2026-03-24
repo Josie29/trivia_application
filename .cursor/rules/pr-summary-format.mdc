@@ -1,0 +1,21 @@
+---
+description: PR summaries use Added/Modified/Removed format
+alwaysApply: false
+---
+# PR Summary Format
+
+When asked to summarize a PR, use this structure:
+### Added
+- item 1
+- item 2
+- item ...
+
+### Modified
+- ...
+
+### Removed
+- ...
+
+Keep each item concise and action-oriented. If a section has no items, don't include the header for it.
+
+Always generate the summary in markdown and wrap it in a markdown code block (```markdown ... ```) so the user can copy raw markdown into GitHub.

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trivia — Live transcription</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+    input[type="url"] { width: 100%; padding: 0.5rem; box-sizing: border-box; margin-bottom: 1rem; }
+    .actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    button { padding: 0.5rem 1rem; cursor: pointer; }
+    #status { min-height: 1.25rem; color: #333; margin-bottom: 0.5rem; }
+    #status.error { color: #a00; }
+    #transcript {
+      border: 1px solid #ccc; border-radius: 4px; padding: 1rem;
+      min-height: 12rem; max-height: 24rem; overflow: auto; white-space: pre-wrap;
+      background: #fafafa; font-size: 0.95rem;
+    }
+    p.hint { font-size: 0.85rem; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Live transcription</h1>
+  <p class="hint">Point <code>config.js</code> at your API when using GitHub Pages; for local dev, run <code>python run.py</code> from <code>backend/</code> and leave the base URL empty. Requires an active Twitch stream.</p>
+
+  <label for="twitchUrl">Twitch channel URL</label>
+  <input id="twitchUrl" type="url" placeholder="https://www.twitch.tv/your_channel" autocomplete="off" />
+
+  <div class="actions">
+    <button type="button" id="btnStart">Start</button>
+    <button type="button" id="btnStop">Stop</button>
+  </div>
+
+  <div id="status" aria-live="polite"></div>
+  <div id="transcript" aria-label="Transcription output"></div>
+
+  <script src="config.js"></script>
+  <script>
+    const API_BASE =
+      typeof window.__TRIVIA_API_BASE__ === "string"
+        ? window.__TRIVIA_API_BASE__.replace(/\/$/, "")
+        : "";
+    function apiUrl(path) {
+      const p = path.startsWith("/") ? path : "/" + path;
+      return API_BASE ? API_BASE + p : p;
+    }
+
+    const statusEl = document.getElementById("status");
+    const transcriptEl = document.getElementById("transcript");
+    const urlInput = document.getElementById("twitchUrl");
+    let es = null;
+
+    function setStatus(msg, isError) {
+      statusEl.textContent = msg || "";
+      statusEl.classList.toggle("error", !!isError);
+    }
+
+    function closeStream() {
+      if (es) {
+        es.close();
+        es = null;
+      }
+    }
+
+    function appendTranscript(text) {
+      const line = document.createTextNode(text + "\n\n");
+      transcriptEl.appendChild(line);
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    }
+
+    function openEventSource() {
+      closeStream();
+      es = new EventSource(apiUrl("/api/transcription/stream"));
+      es.onmessage = function (ev) {
+        try {
+          const data = JSON.parse(ev.data);
+          if (data && typeof data.text === "string") {
+            appendTranscript(data.text);
+          }
+        } catch (err) {
+          setStatus("Bad event data from server", true);
+        }
+      };
+      es.onerror = function () {
+        setStatus("Transcription stream disconnected (stop or network).", true);
+        closeStream();
+      };
+    }
+
+    document.getElementById("btnStart").addEventListener("click", async function () {
+      setStatus("");
+      const twitchUrl = urlInput.value.trim();
+      if (!twitchUrl) {
+        setStatus("Enter a Twitch URL.", true);
+        return;
+      }
+      try {
+        const res = await fetch(apiUrl("/api/start"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ twitch_url: twitchUrl }),
+        });
+        const bodyText = await res.text();
+        let detail = bodyText;
+        try {
+          const j = JSON.parse(bodyText);
+          detail = j.detail ? (Array.isArray(j.detail) ? j.detail.map(function (d) { return d.msg || d; }).join(" ") : j.detail) : JSON.stringify(j);
+        } catch (_) { /* use raw */ }
+        if (!res.ok) {
+          setStatus("Start failed (" + res.status + "): " + detail, true);
+          return;
+        }
+        transcriptEl.textContent = "";
+        setStatus("Running. Transcription lines appear below.");
+        openEventSource();
+      } catch (err) {
+        setStatus("Network error: " + err.message, true);
+      }
+    });
+
+    document.getElementById("btnStop").addEventListener("click", async function () {
+      closeStream();
+      try {
+        const res = await fetch(apiUrl("/api/stop"), { method: "POST" });
+        const bodyText = await res.text();
+        let detail = bodyText;
+        try {
+          const j = JSON.parse(bodyText);
+          detail = j.detail != null ? String(j.detail) : JSON.stringify(j);
+        } catch (_) { /* use raw */ }
+        if (!res.ok) {
+          setStatus("Stop failed (" + res.status + "): " + detail, true);
+          return;
+        }
+        setStatus("Stopped.");
+      } catch (err) {
+        setStatus("Network error: " + err.message, true);
+      }
+    });
+  </script>
+</body>
+</html>

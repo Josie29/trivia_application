@@ -2,69 +2,98 @@
 # live_trivia_assistant.py
 import os
 import time
+from collections.abc import Callable
+from typing import Optional
+
 from dotenv import load_dotenv
-from .LiveTwitchAudioCatcher import LiveTwitchAudioCapture
-from .StreamingTranscriber import StreamingTranscriber
-from .QuestionExtractor import QuestionExtractor
+
+from config import Config
 from .ExcelManager import TriviaExcelManager
+from .LiveTwitchAudioCatcher import LiveTwitchAudioCapture
+from .QuestionExtractor import QuestionExtractor
 from .SlidingWindowProcessor import SlidingWindowProcessor
+from .StreamingTranscriber import StreamingTranscriber
+
 
 class LiveTriviaAssistant:
-    def __init__(self, twitch_channel_url):
+    def __init__(
+        self,
+        twitch_channel_url: str,
+        on_transcription: Optional[Callable[[str], None]] = None,
+        quiet: bool = False,
+    ):
+        """Wire capture, transcription, extraction, and sliding-window processing.
+
+        Args:
+            twitch_channel_url: Full Twitch channel URL (e.g. https://www.twitch.tv/name).
+            on_transcription: Optional callback for each non-duplicate transcription.
+            quiet: If True, omit decorative console output (e.g. for API use).
+        """
         load_dotenv()
-        
-        print("=" * 60)
-        print("🎮 LIVE TRIVIA ASSISTANT")
-        print("=" * 60)
-        
-        # Initialize components
+
+        self._quiet = quiet
+        if not quiet:
+            print("=" * 60)
+            print("🎮 LIVE TRIVIA ASSISTANT")
+            print("=" * 60)
+
         self.stream_capture = LiveTwitchAudioCapture(twitch_channel_url)
-        self.transcriber = StreamingTranscriber(model_size="base", device="cpu")
+        self.transcriber = StreamingTranscriber(
+            model_size=Config.WHISPER_MODEL_SIZE,
+            device=Config.WHISPER_DEVICE,
+        )
         self.extractor = QuestionExtractor(api_key=os.getenv("OPENAI_API_KEY"))
         self.excel_manager = TriviaExcelManager()
-        
+
         self.processor = SlidingWindowProcessor(
             stream_capture=self.stream_capture,
             transcriber=self.transcriber,
             extractor=self.extractor,
             excel_manager=self.excel_manager,
-            window_duration=30,    # Process 30 seconds at a time
-            overlap_duration=15    # 50% overlap to catch full questions
+            window_duration=Config.WINDOW_DURATION,
+            overlap_duration=Config.OVERLAP_DURATION,
+            on_transcription=on_transcription,
         )
-        
+
         self.is_running = False
-    
+
     def start(self):
-        """Start capturing and processing live stream"""
+        """Start capturing and processing the live stream.
+
+        Raises:
+            Exception: Propagates connection or pipeline errors from capture or processing.
+        """
         try:
-            # Connect to Twitch stream
             self.stream_capture.start_stream()
-            
-            # Give stream a moment to stabilize
-            print("⏳ Waiting for stream to stabilize...")
+
+            if not self._quiet:
+                print("⏳ Waiting for stream to stabilize...")
             time.sleep(3)
-            
-            # Start processing
+
             self.processor.start_processing()
-            
+
             self.is_running = True
-            print("\n✅ LIVE PROCESSING ACTIVE")
-            print("=" * 60)
-            
+            if not self._quiet:
+                print("\n✅ LIVE PROCESSING ACTIVE")
+                print("=" * 60)
+
         except Exception as e:
-            print(f"❌ Failed to start: {e}")
+            if not self._quiet:
+                print(f"❌ Failed to start: {e}")
             raise
-    
+
     def stop(self):
-        """Stop everything"""
-        print("\n🛑 Stopping...")
+        """Stop processing and release the stream."""
+        if not self._quiet:
+            print("\n🛑 Stopping...")
         self.processor.stop_processing()
         self.stream_capture.stop_stream()
         self.is_running = False
-        print("✓ Stopped")
+        if not self._quiet:
+            print("✓ Stopped")
     
     def run_interactive(self):
-        """Run with interactive CLI"""
+        """Run the assistant until the user stops via CLI commands or Ctrl+C."""
         self.start()
         
         print("\nCommands:")

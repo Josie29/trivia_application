@@ -1,0 +1,36 @@
+---
+description: General development standards — code quality, error handling, docstrings, docs
+alwaysApply: true
+---
+
+# General Development Standards
+
+Apply these standards to all new development.
+
+## 1. Production-level quality
+
+- **Act like an expert code reviewer**: consider readability, maintainability, naming, single responsibility, and appropriate abstraction. Use type hints. Avoid duplication; prefer small, testable functions. Match existing project patterns and style.
+- If something could be unclear to a future maintainer or could break in edge cases, address it or call it out. Use pydantic models when helpful for readability.
+
+## 2. Inquisitive questions
+
+- **Consider what might be missing**: dependencies, edge cases, config, backwards compatibility, observability, security. If you think the user might be forgetting something important (e.g. error recovery, idempotency, logging, or a scenario that could break the feature), **ask a short, pointed question** rather than assuming.
+
+## 3. Error handling
+
+- **Always consider error handling**: validate inputs, handle missing or malformed data, and use try/except only where you can handle or meaningfully report the failure. Prefer specific exception types; avoid bare `except`. Log errors with enough context to debug; re-raise or convert to domain errors when appropriate.
+
+## 4. Docstrings
+
+- **Every function must have a docstring** with:
+  - **Summary**: One line (or short paragraph) describing what the function does.
+  - **Args**: For each parameter, name and description (and type if not obvious).
+  - **Returns**: (Optional, only if non empty) Description of the return value and type.
+  - **Raises**: (Optional, only if non empty) Any exceptions the function may raise, with when/why.
+
+Use a consistent style (e.g. Google or NumPy); match the rest of the codebase. One-line docstrings are acceptable only for trivial functions when Args/Returns/Raises are empty.
+
+## 5. Documentation
+
+- Keep the project structure in the README up to date as you make changes.
+- **Use relative paths** in README and other repo documentation (e.g. `backend/`, `index.html`, `cd ..`) rather than machine-specific absolute paths such as `/Users/...`. State the working directory when it matters (project root vs `backend/`, etc.) so instructions work for any clone location.

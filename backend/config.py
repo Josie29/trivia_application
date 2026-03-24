@@ -47,18 +47,42 @@ class Config:
     TEMP_AUDIO_DIR = "data/temp"
     
     @classmethod
-    def validate(cls):
-        """Validate configuration"""
-        if not cls.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY not set in .env file")
-        
-        if not cls.TWITCH_CHANNEL_URL:
-            raise ValueError("TWITCH_CHANNEL_URL not set in .env file")
-        
-        # Create directories if they don't exist
+    def _ensure_data_dirs(cls):
+        """Create standard data and log directories if missing."""
         os.makedirs("data", exist_ok=True)
         os.makedirs("data/temp", exist_ok=True)
         os.makedirs(cls.LOG_DIR, exist_ok=True)
         os.makedirs(cls.TRANSCRIPTION_LOG_DIR, exist_ok=True)
-        
+
+    @classmethod
+    def validate(cls):
+        """Validate configuration for the CLI assistant (requires Twitch URL in env)."""
+        if not cls.OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY not set in .env file")
+
+        if not cls.TWITCH_CHANNEL_URL:
+            raise ValueError("TWITCH_CHANNEL_URL not set in .env file")
+
+        cls._ensure_data_dirs()
+
+        return True
+
+    @classmethod
+    def validate_for_api(cls):
+        """Validate configuration for the FastAPI server.
+
+        Requires ``OPENAI_API_KEY`` only; Twitch channel URL is supplied per request.
+        Ensures data and log directories exist.
+
+        Returns:
+            bool: ``True`` if validation succeeded.
+
+        Raises:
+            ValueError: If ``OPENAI_API_KEY`` is missing from the environment.
+        """
+        if not cls.OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY not set in .env file")
+
+        cls._ensure_data_dirs()
+
         return True
