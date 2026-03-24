@@ -3,26 +3,47 @@
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from datetime import datetime
+from typing import Optional
+
 from utils.logger import setup_logger, setup_transcription_logger
 
 logger = setup_logger(__name__)
 transcription_logger = setup_transcription_logger()
 
 class SlidingWindowProcessor:
-    def __init__(self, stream_capture, transcriber, extractor, excel_manager,
-                 window_duration=30, overlap_duration=15):
-        """
-        window_duration: seconds of audio to process at once (30s covers full question)
-        overlap_duration: seconds of overlap between windows (50% = 15s)
+    def __init__(
+        self,
+        stream_capture,
+        transcriber,
+        extractor,
+        excel_manager,
+        window_duration=30,
+        overlap_duration=15,
+        on_transcription: Optional[Callable[[str], None]] = None,
+    ):
+        """Process overlapping audio windows from a live stream.
+
+        Args:
+            stream_capture: Source of raw audio (e.g. live Twitch capture).
+            transcriber: Component that turns audio buffers into text.
+            extractor: LLM-backed extractor for structured question fields.
+            excel_manager: Persists extracted questions.
+            window_duration: Seconds of audio per processing window.
+            overlap_duration: Seconds between window starts (slide step).
+            on_transcription: Optional callback invoked with each non-duplicate
+                transcription text after the minimum-length filter, before
+                question extraction.
         """
         self.stream_capture = stream_capture
         self.transcriber = transcriber
         self.extractor = extractor
         self.excel_manager = excel_manager
-        
+
         self.window_duration = window_duration
         self.overlap_duration = overlap_duration
+        self.on_transcription = on_transcription
         
         self.is_processing = False
         self.processing_thread = None
@@ -85,8 +106,10 @@ class SlidingWindowProcessor:
         if self._is_duplicate_transcription(transcription):
             logger.info("Duplicate transcription detected (skipping)")
             return
-        
+
         self.recent_transcriptions.append(transcription)
+        if self.on_transcription is not None:
+            self.on_transcription(transcription)
         
         # Extract question information using LLM
         question_info = self.extractor.extract_question_info(transcription)

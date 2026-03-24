@@ -30,7 +30,8 @@ Never miss a question again! This tool captures audio from live Twitch trivia st
 - [Performance & Latency](#-performance--latency)
 - [Troubleshooting](#-troubleshooting)
 - [Advanced Configuration](#-advanced-configuration)
-- [Project Structure](#-project-structure)
+- [Project Structure](#project-structure)
+- [Web / API](#web--api)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -219,6 +220,8 @@ OVERLAP_DURATION=15
 LOG_LEVEL=INFO
 ```
 
+For the **web server** (`python run.py` from `backend/`), only `OPENAI_API_KEY` is required in `.env`. You may omit `TWITCH_CHANNEL_URL` and enter the Twitch URL in the browser instead.
+
 🎯 Usage
 Basic Usage
 
@@ -248,6 +251,50 @@ Open data/trivia_questions.xlsx in Excel/Google Sheets
 Questions appear within 20-25 seconds of being asked
 Each hour has its own sheet tab
 
+---
 
+## Web / API
 
+Run the FastAPI server and browser UI from the **`backend/`** directory (same as the CLI, so `config` and `core` imports resolve correctly).
 
+```bash
+cd backend
+pip install -r requirements.txt
+python run.py
+```
+
+Then open `http://localhost:8000` in a browser. The page is served from `frontend/index.html` (same origin as the API).
+
+- **Start** — `POST /api/start` with JSON `{"twitch_url": "https://www.twitch.tv/..."}`. The first run loads the Whisper model and can take noticeable time.
+- **Transcript stream** — `GET /api/transcription/stream` (Server-Sent Events; the page connects automatically after a successful start).
+- **Stop** — `POST /api/stop`.
+- **Health** — `GET /health`.
+
+**Deployment note:** The server keeps one in-memory session and uses background threads. Use a **single Uvicorn worker** (e.g. `uvicorn api:app --host 0.0.0.0 --port 8000 --workers 1`) until you add shared state. Twitch streams may fail from some cloud datacenter IPs; local or home/VPS networks often work better.
+
+Alternative without `run.py` (from `backend/`):
+
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+---
+
+## Project structure
+
+```text
+trivia_application/
+  backend/
+    api.py            # FastAPI app and routes
+    run.py            # Dev entry: validate config + uvicorn
+    main.py           # CLI assistant entry
+    config.py
+    schemas.py        # Pydantic models for API / SSE
+    requirements.txt
+    core/             # Capture, Whisper, processor, Excel, etc.
+    utils/
+    tests/
+  frontend/
+    index.html        # Web UI: Twitch URL, start/stop, transcript
+    StatusGUI.py      # Optional Tkinter status window
+```

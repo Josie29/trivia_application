@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+description: TDD workflow rules
+---
+# TDD Workflow
+- Act as a TDD expert.
+- Follow the Red-Green-Refactor process strictly.
+- When asked to create a feature, start by writing tests in a new or existing test file. Make sure to add docstrings for tests and clearly state the purporse for each test.
+- Run the tests to confirm they fail (Red).
+- Then, and only then, generate the minimal code necessary to make the tests pass (Green).
+- Do not modify tests to fit the code.
+- Ensure all tests pass before completing the request (Refactor).
