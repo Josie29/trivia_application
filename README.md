@@ -1,300 +1,72 @@
-# Trivia Transcription Assistant 🎮📝
+# Trivia Transcription Assistant
 
-**Automatically transcribe and organize trivia questions from live Twitch streams in real-time**
-
-Never miss a question again! This tool captures audio from live Twitch trivia streams, transcribes questions using AI, extracts the important details, and automatically logs everything to a structured Excel spreadsheet—giving you more time to focus on answering rather than frantically writing down questions.
+Capture live Twitch trivia audio, transcribe with Faster-Whisper, extract questions with OpenAI, and save structured rows to Excel—optionally driven from the terminal or from a minimal browser UI.
 
 ---
 
-## ✨ Features
+## Features
 
-- 🔴 **Live Stream Processing** - Connects directly to Twitch streams (no audio routing needed)
-- 🎙️ **Real-Time Transcription** - Uses Faster-Whisper for low-latency speech-to-text
-- 🤖 **Intelligent Question Extraction** - GPT-4 powered extraction identifies questions, question numbers, hours, and picture questions
-- 🔄 **Duplicate Detection** - Automatically skips repeated questions (both readings)
-- 📊 **Organized Excel Output** - Each hour gets its own sheet with formatted, searchable questions
-- ⚡ **Low Latency** - Questions appear in Excel ~20-25 seconds after being asked
-- 🎯 **Smart Filtering** - Ignores music, introductions, and other non-question audio
-- 🏷️ **Picture Question Marking** - Automatically identifies and flags picture questions
+- Live Twitch ingest (Streamlink + FFmpeg), no manual audio routing
+- Real-time transcription (Faster-Whisper) with sliding windows and VAD-friendly settings
+- Question extraction (OpenAI) with hour/number/picture-question hints
+- Transcription- and question-level deduplication
+- Excel workbook output (`data/trivia_questions.xlsx` when run with `backend/` as cwd)
+- **CLI** (`backend/main.py`) or **browser** UI (static page under `frontend/`, served by `backend` FastAPI)
 
 ---
 
-## 📋 Table of Contents
+## How it works
 
-- [How It Works](#-how-it-works)
-- [Prerequisites](#-prerequisites)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [Usage](#-usage)
-- [Excel Output Format](#-excel-output-format)
-- [Performance & Latency](#-performance--latency)
-- [Troubleshooting](#-troubleshooting)
-- [Advanced Configuration](#-advanced-configuration)
-- [Project Structure](#project-structure)
-- [Web / API](#web--api)
-- [Contributing](#-contributing)
-- [License](#-license)
+```text
+LIVE TWITCH (audio) → Streamlink → FFmpeg → PCM queue
+    → Sliding-window chunks → Whisper → dedupe (transcript)
+    → OpenAI extraction → dedupe (question) → Excel sheets by hour
+```
+
+**Rough timeline:** a question may show up in Excel on the order of tens of seconds after it is spoken (depends on window overlap, model speed, and API latency).
 
 ---
 
-## 🔧 How It Works
+## Getting started
 
-┌─────────────────────────────────────────────────────────────┐
-│ LIVE TWITCH STREAM                                           │
-│ (Audio: Questions + Songs + Introductions)                   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ STREAMLINK                                                   │
-│ • Gets live stream URL                                       │
-│ • Selects audio-only or lowest quality stream                │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ FFMPEG                                                       │
-│ • Extracts audio in real-time                                │
-│ • Converts to 16kHz mono PCM                                 │
-│ • Pipes to Python                                            │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ AUDIO QUEUE (Continuous Buffer)                             │
-│ • Stores 1-second chunks                                     │
-│ • Maximum 100 chunks (~1.6 minutes buffer)                   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ SLIDING WINDOW PROCESSOR                                     │
-│ • Every 15 seconds, grab 30 seconds of audio                 │
-│ • 50% overlap ensures complete question capture              │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ FASTER-WHISPER (Transcription)                              │
-│ • Transcribes 30s audio → text (~2-3 seconds)                │
-│ • VAD filters out silence/music sections                     │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ DUPLICATE CHECK (Transcription Level)                       │
-│ • 80% word similarity = repeated reading                     │
-│ • Skip if duplicate                                          │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ GPT-4 EXTRACTION                                             │
-│ • Extracts question number, hour, actual question            │
-│ • Identifies picture questions                               │
-│ • Returns null if no question found                          │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ DUPLICATE CHECK (Question Level)                            │
-│ • 85% similarity = already saved                             │
-│ • Skip if duplicate                                          │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ EXCEL WRITER                                                 │
-│ • Adds to appropriate hour sheet                             │
-│ • Records timestamp                                          │
-│ • Marks picture questions                                    │
-└─────────────────────────────────────────────────────────────┘
+1. **Clone** this repo and `cd` into `trivia_application/`.
+2. **Install and configure the Python backend** — follow [**backend/README.md**](backend/README.md) (venv, `pip install -r requirements.txt`, `.env`, FFmpeg).
+3. **Pick how you run it:**
+   - **Terminal:** from `backend/`, run `python main.py` (needs `TWITCH_CHANNEL_URL` in `.env`).
+   - **Browser:** from `backend/`, run `python run.py`, then open `http://localhost:8000`. Details in **backend** and **frontend** READMEs.
 
-
-
-**Timeline Example:**
-- `00:00` - Question asked on stream
-- `00:20` - Question repeated (second reading)
-- `00:25` - Question appears in your Excel spreadsheet ✅
-- `00:30` - Song plays
-- `01:30` - Next question begins
+You need **Python 3.8+**, **FFmpeg**, and an **OpenAI API key**. See [backend/README.md](backend/README.md) for versions, env vars, and troubleshooting.
 
 ---
 
-## 📦 Prerequisites
+## Configuration (overview)
 
-### Required Software
-
-- **Python 3.8 or higher** - [Download Python](https://www.python.org/downloads/)
-- **FFmpeg** - For audio processing
-  - Windows: `choco install ffmpeg` or [manual download](https://ffmpeg.org/download.html)
-  - Mac: `brew install ffmpeg`
-  - Linux: `sudo apt install ffmpeg`
-
-### Required API Keys
-
-- **OpenAI API Key** - For question extraction with GPT-4
-  - Sign up at [OpenAI](https://platform.openai.com/)
-  - Estimated cost: ~$0.05-0.10 per hour of trivia
-  - You can use GPT-3.5-turbo for cheaper option (~$0.01/hour)
-
-### System Requirements
-
-- **RAM**: 2GB minimum (4GB recommended)
-- **CPU**: Multi-core recommended for faster transcription
-- **Storage**: 1GB for models and dependencies
-- **Internet**: Stable connection required for live streaming
+Environment variables are read from a `.env` file—place it in **`backend/`** if you start the app from there (recommended). The CLI requires a Twitch URL in env; the web server can take the URL from the form instead. Full variable list and validation rules: [**backend/README.md**](backend/README.md#3-environment-file).
 
 ---
 
-## 🚀 Installation
-
-### Step 1: Clone or Download
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd trivia-transcription-assistant
-
-# Or download and extract the ZIP file
-```
-
-### Step 2: Create Virtual Environment
-
-**Windows:**
-```bash
-python -m venv venv
-venv\Scripts\activate
-```
-
-**Mac/Linux:**
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### Step 3: Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-This will install:
-
-- `streamlink` - Twitch stream access
-- `faster-whisper` - Fast speech recognition
-- `openai` - GPT-4 API access
-- `openpyxl` - Excel file handling
-- And other required packages
-
-### Step 4: Verify FFmpeg Installation
-
-```bash
-ffmpeg -version
-```
-
-You should see version information. If not, FFmpeg needs to be installed or added to your PATH.
-
-### Step 5: Download Whisper Model (First Run)
-
-The first time you run the application, it will automatically download the Whisper model (~140MB for "base" model). This is a one-time download and will be cached locally.
-
----
-
-## ⚙️ Configuration
-
-### 1. Create .env File
-
-Create a file named `.env` in the project root directory:
-
-```bash
-# Required Settings
-OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx
-TWITCH_CHANNEL_URL=https://www.twitch.tv/your_trivia_channel
-
-# Optional Settings (defaults shown)
-WHISPER_MODEL_SIZE=base
-WHISPER_DEVICE=cpu
-WINDOW_DURATION=30
-OVERLAP_DURATION=15
-LOG_LEVEL=INFO
-```
-
-For the **web server** (`python run.py` from `backend/`), only `OPENAI_API_KEY` is required in `.env`. You may omit `TWITCH_CHANNEL_URL` and enter the Twitch URL in the browser instead.
-
-🎯 Usage
-Basic Usage
-
-
-Start the application:
-Bashpython main.py
-
-
-
-Wait for connection:
-Unknown🔴 Connecting to Twitch stream: https://www.twitch.tv/your_channel
-✓ Using audio-only stream
-✓ Live stream connected!
-⏳ Waiting for stream to stabilize...
-✅ LIVE PROCESSING ACTIVE
-
-
-The app runs automatically!
-
-Questions are detected and saved to data/trivia_questions.xlsx
-Watch the console for real-time status updates
-
-
-Open Excel file:
-
-Open data/trivia_questions.xlsx in Excel/Google Sheets
-Questions appear within 20-25 seconds of being asked
-Each hour has its own sheet tab
-
----
-
-## Web / API
-
-Run the FastAPI server and browser UI from the **`backend/`** directory (same as the CLI, so `config` and `core` imports resolve correctly).
-
-```bash
-cd backend
-pip install -r requirements.txt
-python run.py
-```
-
-Then open `http://localhost:8000` in a browser. The page is served from `frontend/index.html` (same origin as the API).
-
-- **Start** — `POST /api/start` with JSON `{"twitch_url": "https://www.twitch.tv/..."}`. The first run loads the Whisper model and can take noticeable time.
-- **Transcript stream** — `GET /api/transcription/stream` (Server-Sent Events; the page connects automatically after a successful start).
-- **Stop** — `POST /api/stop`.
-- **Health** — `GET /health`.
-
-**Deployment note:** The server keeps one in-memory session and uses background threads. Use a **single Uvicorn worker** (e.g. `uvicorn api:app --host 0.0.0.0 --port 8000 --workers 1`) until you add shared state. Twitch streams may fail from some cloud datacenter IPs; local or home/VPS networks often work better.
-
-Alternative without `run.py` (from `backend/`):
-
-```bash
-uvicorn api:app --host 0.0.0.0 --port 8000
-```
-
----
-
-## Project structure
+## Repository layout
 
 ```text
 trivia_application/
-  backend/
-    api.py            # FastAPI app and routes
-    run.py            # Dev entry: validate config + uvicorn
-    main.py           # CLI assistant entry
-    config.py
-    schemas.py        # Pydantic models for API / SSE
-    requirements.txt
-    core/             # Capture, Whisper, processor, Excel, etc.
-    utils/
-    tests/
-  frontend/
-    index.html        # Web UI: Twitch URL, start/stop, transcript
-    StatusGUI.py      # Optional Tkinter status window
+  README.md                 ← You are here (product overview & navigation)
+  backend/README.md         ← Install, run, API, env, troubleshooting
+  frontend/README.md        ← Web files, how the UI is served
+  backend/                  ← Python: CLI, FastAPI, core pipeline, tests
+  frontend/                 ← index.html (+ optional StatusGUI.py)
 ```
+
+---
+
+## More detail by area
+
+| Topic | Document |
+|--------|-----------|
+| Install, `.env`, CLI vs `run.py`, HTTP API, workers, layout | [backend/README.md](backend/README.md) |
+| `index.html`, EventSource, Tkinter helper | [frontend/README.md](frontend/README.md) |
+
+---
+
+## Contributing / license
+
+Contributing guidelines and license are not defined in this repo yet; add them here when you adopt a policy.
