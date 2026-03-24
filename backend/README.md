@@ -112,7 +112,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 
 **Deployment:** One in-memory session and background threads — use **one Uvicorn worker** (e.g. `--workers 1`) until you add shared state. Twitch access may fail from some cloud datacenters; home/VPS often works better.
 
-**Split hosting (UI on GitHub Pages):** set `CORS_ORIGINS` and deploy the API with Docker — see [`../DEPLOY.md`](../DEPLOY.md) and the repo-root [`../Dockerfile`](../Dockerfile).
+**Production:** default path is **Render** with the repo-root [`../Dockerfile`](../Dockerfile) (bundles `../frontend/`). **Split hosting** (UI on GitHub Pages) needs `CORS_ORIGINS` — see [`../DEPLOY.md`](../DEPLOY.md).
 
 Pydantic models live in [`schemas.py`](schemas.py). Route wiring in [`api.py`](api.py).
 

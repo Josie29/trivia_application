@@ -25,9 +25,13 @@ python run.py
 
 Open `http://localhost:8000` — the browser loads `index.html` from this folder (same origin as `/api/...`). Keep [`config.js`](config.js) as `__TRIVIA_API_BASE__ = ""` so requests stay relative.
 
-### GitHub Pages
+### Production (Render Docker)
 
-The workflow [`.github/workflows/deploy-frontend-pages.yml`](../.github/workflows/deploy-frontend-pages.yml) publishes this folder to **GitHub Pages** (enable **Actions** as the Pages source in repo settings). Then set `config.js` to your public API URL and configure the API’s `CORS_ORIGINS` — see [`../DEPLOY.md`](../DEPLOY.md).
+The root [`Dockerfile`](../Dockerfile) copies this folder into the image; FastAPI serves it at `/` on your Render URL. Use `__TRIVIA_API_BASE__ = ""` in [`config.js`](config.js). See [`../DEPLOY.md`](../DEPLOY.md).
+
+### GitHub Pages (optional)
+
+The workflow [`.github/workflows/deploy-frontend-pages.yml`](../.github/workflows/deploy-frontend-pages.yml) can publish this folder separately (enable **Actions** as the Pages source). Then set `config.js` to your public API URL and `CORS_ORIGINS` on the API — see [`../DEPLOY.md`](../DEPLOY.md).
 
 The page calls:
 

@@ -15,11 +15,9 @@ Capture live Twitch trivia audio, transcribe with Faster-Whisper, extract questi
 
 ---
 
-## Deploy (GitHub Pages + backend)
+## Deploy (Render — UI + API together)
 
-Host the static UI on **GitHub Actions → GitHub Pages** and the API on a free container host. Easiest default: **[Render](https://render.com)** with the repo-root [`Dockerfile`](Dockerfile) (includes FFmpeg). Set `CORS_ORIGINS` on the API to `https://<your-username>.github.io` and set `frontend/config.js` to your API URL.
-
-Step-by-step: [**DEPLOY.md**](DEPLOY.md).
+**[Render](https://render.com)** Web Service using the repo-root [`Dockerfile`](Dockerfile) ships **backend and `frontend/`** in one container (same URL, FFmpeg included). Keep `frontend/config.js` as `__TRIVIA_API_BASE__ = ""`. Optional split (GitHub Pages + API) is documented in [**DEPLOY.md**](DEPLOY.md).
 
 ---
 
@@ -58,7 +56,7 @@ Environment variables are read from a `.env` file—place it in **`backend/`** i
 ```text
 trivia_application/
   README.md                 ← You are here (product overview & navigation)
-  DEPLOY.md                 ← GitHub Pages + Render (or similar) for production
+  DEPLOY.md                 ← Render (combined) and optional Pages split
   backend/README.md         ← Install, run, API, env, troubleshooting
   frontend/README.md        ← Web files, config.js, GitHub Pages notes
   backend/                  ← Python: CLI, FastAPI, core pipeline, tests
@@ -73,7 +71,7 @@ trivia_application/
 |--------|-----------|
 | Install, `.env`, CLI vs `run.py`, HTTP API, workers, layout | [backend/README.md](backend/README.md) |
 | `index.html`, `config.js`, EventSource, Tkinter helper | [frontend/README.md](frontend/README.md) |
-| Production: Pages workflow, Render, CORS | [DEPLOY.md](DEPLOY.md) |
+| Production: Render (Docker), optional Pages | [DEPLOY.md](DEPLOY.md) |
 
 ---
 
