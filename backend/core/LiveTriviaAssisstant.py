@@ -5,8 +5,6 @@ import time
 from collections.abc import Callable
 from typing import Optional
 
-from dotenv import load_dotenv
-
 from config import Config
 from .ExcelManager import TriviaExcelManager
 from .LiveTwitchAudioCatcher import LiveTwitchAudioCapture
@@ -29,8 +27,6 @@ class LiveTriviaAssistant:
             on_transcription: Optional callback for each non-duplicate transcription.
             quiet: If True, omit decorative console output (e.g. for API use).
         """
-        load_dotenv()
-
         self._quiet = quiet
         if not quiet:
             print("=" * 60)
@@ -133,7 +129,7 @@ class LiveTriviaAssistant:
 
 if __name__ == "__main__":
     # Example usage
-    TWITCH_CHANNEL = "https://www.twitch.tv/YOUR_CHANNEL_NAME"
+    TWITCH_CHANNEL = "https://m.twitch.tv/neglagonave"
     
     assistant = LiveTriviaAssistant(TWITCH_CHANNEL)
     assistant.run_interactive()

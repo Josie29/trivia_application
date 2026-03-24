@@ -10,40 +10,39 @@ class TriviaExcelManager:
     def __init__(self, filename="trivia_questions.xlsx"):
         self.filename = filename
         self.initialize_workbook()
-        
+
+    @staticmethod
+    def _apply_hour_sheet_layout(ws):
+        headers = ["Question #", "Question Text", "Song Played", "Timestamp", "Picture Q?"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True, size=12)
+            cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.alignment = Alignment(horizontal="center")
+        ws.column_dimensions["A"].width = 12
+        ws.column_dimensions["B"].width = 80
+        ws.column_dimensions["C"].width = 40
+        ws.column_dimensions["D"].width = 20
+        ws.column_dimensions["E"].width = 12
+
     def initialize_workbook(self):
-        """Create workbook if it doesn't exist"""
+        """Create workbook if it doesn't exist (openpyxl requires at least one visible sheet)."""
         if not os.path.exists(self.filename):
             wb = Workbook()
-            wb.remove(wb.active)  # Remove default sheet
+            wb.remove(wb.active)
+            ws = wb.create_sheet("Hour 1")
+            self._apply_hour_sheet_layout(ws)
             wb.save(self.filename)
-    
+
     def ensure_sheet_exists(self, hour_number: int):
         """Create sheet for specific hour if it doesn't exist"""
         wb = load_workbook(self.filename)
         sheet_name = f"Hour {hour_number}"
-        
+
         if sheet_name not in wb.sheetnames:
             ws = wb.create_sheet(sheet_name)
-            
-            # Create headers
-            headers = ["Question #", "Question Text", "Song Played", "Timestamp", "Picture Q?"]
-            ws.append(headers)
-            
-            # Style headers
-            for cell in ws[1]:
-                cell.font = Font(bold=True, size=12)
-                cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.alignment = Alignment(horizontal="center")
-            
-            # Set column widths
-            ws.column_dimensions['A'].width = 12
-            ws.column_dimensions['B'].width = 80
-            ws.column_dimensions['C'].width = 40
-            ws.column_dimensions['D'].width = 20
-            ws.column_dimensions['E'].width = 12
-            
+            self._apply_hour_sheet_layout(ws)
             wb.save(self.filename)
     
     def add_question(self, hour_number: int, question_number: int, 

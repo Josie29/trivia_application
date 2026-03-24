@@ -4,16 +4,21 @@
 Configuration settings for Trivia Transcription Assistant
 """
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load backend/.env regardless of current working directory (e.g. repo root vs backend/).
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 class Config:
     # API Keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     
     # Twitch Settings
-    TWITCH_CHANNEL_URL = os.getenv("TWITCH_CHANNEL_URL", "")
+    TWITCH_CHANNEL_URL = os.getenv(
+        "TWITCH_CHANNEL_URL", "https://m.twitch.tv/neglagonave"
+    )
     
     # Audio Settings
     SAMPLE_RATE = 16000  # Hz - optimal for Whisper
