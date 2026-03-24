@@ -22,7 +22,7 @@
 </head>
 <body>
   <h1>Live transcription</h1>
-  <p class="hint">Start the server from <code>backend/</code> with <code>python run.py</code>, then use Start below. Requires an active Twitch stream.</p>
+  <p class="hint">Point <code>config.js</code> at your API when using GitHub Pages; for local dev, run <code>python run.py</code> from <code>backend/</code> and leave the base URL empty. Requires an active Twitch stream.</p>
 
   <label for="twitchUrl">Twitch channel URL</label>
   <input id="twitchUrl" type="url" placeholder="https://www.twitch.tv/your_channel" autocomplete="off" />
@@ -35,7 +35,17 @@
   <div id="status" aria-live="polite"></div>
   <div id="transcript" aria-label="Transcription output"></div>
 
+  <script src="config.js"></script>
   <script>
+    const API_BASE =
+      typeof window.__TRIVIA_API_BASE__ === "string"
+        ? window.__TRIVIA_API_BASE__.replace(/\/$/, "")
+        : "";
+    function apiUrl(path) {
+      const p = path.startsWith("/") ? path : "/" + path;
+      return API_BASE ? API_BASE + p : p;
+    }
+
     const statusEl = document.getElementById("status");
     const transcriptEl = document.getElementById("transcript");
     const urlInput = document.getElementById("twitchUrl");
@@ -61,7 +71,7 @@
 
     function openEventSource() {
       closeStream();
-      es = new EventSource("/api/transcription/stream");
+      es = new EventSource(apiUrl("/api/transcription/stream"));
       es.onmessage = function (ev) {
         try {
           const data = JSON.parse(ev.data);
@@ -86,7 +96,7 @@
         return;
       }
       try {
-        const res = await fetch("/api/start", {
+        const res = await fetch(apiUrl("/api/start"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ twitch_url: twitchUrl }),
@@ -112,7 +122,7 @@
     document.getElementById("btnStop").addEventListener("click", async function () {
       closeStream();
       try {
-        const res = await fetch("/api/stop", { method: "POST" });
+        const res = await fetch(apiUrl("/api/stop"), { method: "POST" });
         const bodyText = await res.text();
         let detail = bodyText;
         try {

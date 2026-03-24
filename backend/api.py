@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import queue
 import threading
 from pathlib import Path
@@ -48,6 +49,31 @@ class _SessionState:
 
 
 _state = _SessionState()
+
+
+def _cors_allow_origins() -> list[str]:
+    """Origins allowed for browser cross-origin calls (e.g. GitHub Pages).
+
+    Merges local defaults with ``CORS_ORIGINS`` (comma-separated) from the environment.
+
+    Returns:
+        List of origin strings, no duplicates.
+    """
+    defaults = [
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ]
+    extra_raw = os.getenv("CORS_ORIGINS", "").strip()
+    if not extra_raw:
+        return defaults
+    extra = [o.strip() for o in extra_raw.split(",") if o.strip()]
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for origin in defaults + extra:
+        if origin not in seen:
+            seen.add(origin)
+            ordered.append(origin)
+    return ordered
 
 
 def _frontend_dir() -> Path:
@@ -165,11 +191,8 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://127.0.0.1:8000",
-            "http://localhost:8000",
-        ],
-        allow_credentials=True,
+        allow_origins=_cors_allow_origins(),
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -11,7 +11,15 @@ Capture live Twitch trivia audio, transcribe with Faster-Whisper, extract questi
 - Question extraction (OpenAI) with hour/number/picture-question hints
 - Transcription- and question-level deduplication
 - Excel workbook output (`data/trivia_questions.xlsx` when run with `backend/` as cwd)
-- **CLI** (`backend/main.py`) or **browser** UI (static page under `frontend/`, served by `backend` FastAPI)
+- **CLI** (`backend/main.py`) or **browser** UI (static page under `frontend/`, served locally by FastAPI or hosted separately)
+
+---
+
+## Deploy (GitHub Pages + backend)
+
+Host the static UI on **GitHub Actions → GitHub Pages** and the API on a free container host. Easiest default: **[Render](https://render.com)** with the repo-root [`Dockerfile`](Dockerfile) (includes FFmpeg). Set `CORS_ORIGINS` on the API to `https://<your-username>.github.io` and set `frontend/config.js` to your API URL.
+
+Step-by-step: [**DEPLOY.md**](DEPLOY.md).
 
 ---
 
@@ -50,8 +58,9 @@ Environment variables are read from a `.env` file—place it in **`backend/`** i
 ```text
 trivia_application/
   README.md                 ← You are here (product overview & navigation)
+  DEPLOY.md                 ← GitHub Pages + Render (or similar) for production
   backend/README.md         ← Install, run, API, env, troubleshooting
-  frontend/README.md        ← Web files, how the UI is served
+  frontend/README.md        ← Web files, config.js, GitHub Pages notes
   backend/                  ← Python: CLI, FastAPI, core pipeline, tests
   frontend/                 ← index.html (+ optional StatusGUI.py)
 ```
@@ -63,7 +72,8 @@ trivia_application/
 | Topic | Document |
 |--------|-----------|
 | Install, `.env`, CLI vs `run.py`, HTTP API, workers, layout | [backend/README.md](backend/README.md) |
-| `index.html`, EventSource, Tkinter helper | [frontend/README.md](frontend/README.md) |
+| `index.html`, `config.js`, EventSource, Tkinter helper | [frontend/README.md](frontend/README.md) |
+| Production: Pages workflow, Render, CORS | [DEPLOY.md](DEPLOY.md) |
 
 ---
 

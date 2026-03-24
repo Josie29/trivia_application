@@ -62,10 +62,14 @@ WHISPER_DEVICE=cpu
 WINDOW_DURATION=30
 OVERLAP_DURATION=15
 LOG_LEVEL=INFO
+
+# When the browser UI is on another origin (e.g. GitHub Pages), list allowed origins (comma-separated, no spaces)
+# CORS_ORIGINS=https://yourusername.github.io
 ```
 
 - **`main.py`** calls `Config.validate()` — needs `OPENAI_API_KEY` and `TWITCH_CHANNEL_URL`.
 - **`run.py`** calls `Config.validate_for_api()` — needs `OPENAI_API_KEY` only; Twitch URL comes from the client.
+- **`CORS_ORIGINS`** — optional; merged with `http://localhost:8000` and `http://127.0.0.1:8000`. Required for `fetch`/SSE from **GitHub Pages** (or any other site) to hit your API. Use the exact browser origin, e.g. `https://yourusername.github.io`.
 
 ### 4. First run
 
@@ -107,6 +111,8 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | `GET` | `/api/transcription/stream` | SSE: JSON lines `{"text": "..."}` |
 
 **Deployment:** One in-memory session and background threads — use **one Uvicorn worker** (e.g. `--workers 1`) until you add shared state. Twitch access may fail from some cloud datacenters; home/VPS often works better.
+
+**Split hosting (UI on GitHub Pages):** set `CORS_ORIGINS` and deploy the API with Docker — see [`../DEPLOY.md`](../DEPLOY.md) and the repo-root [`../Dockerfile`](../Dockerfile).
 
 Pydantic models live in [`schemas.py`](schemas.py). Route wiring in [`api.py`](api.py).
 
