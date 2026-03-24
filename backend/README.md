@@ -69,7 +69,7 @@ LOG_LEVEL=INFO
 
 - **`main.py`** calls `Config.validate()` — needs `OPENAI_API_KEY` and `TWITCH_CHANNEL_URL`.
 - **`run.py`** calls `Config.validate_for_api()` — needs `OPENAI_API_KEY` only; Twitch URL comes from the client.
-- **`CORS_ORIGINS`** — optional; merged with `http://localhost:8000` and `http://127.0.0.1:8000`. Required for `fetch`/SSE from **GitHub Pages** (or any other site) to hit your API. Use the exact browser origin, e.g. `https://yourusername.github.io`.
+- **`CORS_ORIGINS`** — optional; merged with localhost defaults and, on Render, **`RENDER_EXTERNAL_URL`** (set automatically by Render). Add entries for any **other** page origins (e.g. GitHub Pages: `https://yourusername.github.io`). Use the exact `Origin` the browser sends: `https`, host only, no trailing slash.
 
 ### 4. First run
 

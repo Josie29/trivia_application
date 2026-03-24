@@ -20,12 +20,34 @@ The Docker image runs **FastAPI** and serves the **static UI** from the same URL
 2. **Root Directory:** leave empty (repository root).
 3. **Dockerfile path:** default `Dockerfile` at the repo root.
 4. **Instance type:** Free (or paid if you need more RAM).
-5. **Environment variables:**
-   - `OPENAI_API_KEY` — required
-   - `CORS_ORIGINS` — optional when the UI is served by the same service (same origin). Add extra origins only if you also host the UI elsewhere (e.g. GitHub Pages), comma-separated.
+5. **Environment variables** — see [table below](#render-environment-variables).
 6. Deploy. Open your service URL (e.g. `https://your-service.onrender.com`) — you should get the web UI; API routes stay under `/api/...` and `/health`.
 
-Keep [`frontend/config.js`](frontend/config.js) as `window.__TRIVIA_API_BASE__ = ""` so the browser uses the Render hostname for `fetch` and `EventSource`.
+Keep [`frontend/config.js`](frontend/config.js) as `window.__TRIVIA_API_BASE__ = ""` when the UI is served from this same Web Service so `fetch` and `EventSource` stay on **https** with the same host (avoids mixed content and CORS mismatches).
+
+### Render environment variables
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `OPENAI_API_KEY` | **Yes** | Your OpenAI API key. Without it the API will not start. |
+| `RENDER_EXTERNAL_URL` | No (auto) | Render sets this to your service’s public **https** URL (e.g. `https://your-service.onrender.com`). The app adds it to CORS automatically—you do **not** need to create it manually. |
+| `CORS_ORIGINS` | Usually no | Comma-separated extra origins if the **browser page** is on a **different** host than the API (e.g. GitHub Pages: `https://yourusername.github.io`). No spaces. Must match the browser `Origin` exactly (`https://…`, no trailing slash). If you use a **custom domain** for this service, add that origin here too (Render’s auto URL alone may not match what users type). |
+| `WHISPER_MODEL_SIZE` | No | Default `base`. Use `tiny` or `small` on tight RAM (free tier). |
+| `WHISPER_DEVICE` | No | Default `cpu`. |
+| `WINDOW_DURATION` / `OVERLAP_DURATION` | No | Override processing window sizes (seconds). |
+| `LOG_LEVEL` | No | Default `INFO`. |
+| `TWITCH_CHANNEL_URL` | No | Only for CLI (`main.py`); the web UI sends the URL per request. |
+
+`PORT` is set by Render; the Docker `CMD` already uses it.
+
+### “SSL” or CORS errors in the browser
+
+This project is a **single repo** with `backend/` and `frontend/`; Render runs one container that serves both. Connection issues are usually **origin or HTTPS**, not two separate repos.
+
+1. **Same Render URL:** Use `__TRIVIA_API_BASE__ = ""` in [`frontend/config.js`](frontend/config.js). Do not point `config.js` at `http://…` while the page is `https://…` (mixed content is blocked).
+2. **GitHub Pages + Render API:** Set `__TRIVIA_API_BASE__` to your full Render API URL (**https**, no trailing slash). Set `CORS_ORIGINS` on Render to your Pages **origin** only, e.g. `https://yourusername.github.io` (no path; the browser does not put `/repo-name` in `Origin`).
+3. **Custom domain:** Add `https://your.custom.domain` to `CORS_ORIGINS` so it matches how users open the UI.
+4. After changing env vars on Render, **redeploy** or restart so the app picks them up.
 
 ### Health check
 
@@ -53,9 +75,10 @@ If the Pages deploy fails with **404 / Not Found** from `deploy-pages`, Pages **
 
 ## 4. Checklist (single Render service)
 
-- [ ] Web Service built from root `Dockerfile`
+- [ ] One repo / one Web Service: root `Dockerfile` (includes `frontend/`)
 - [ ] `OPENAI_API_KEY` set on Render
 - [ ] `frontend/config.js` uses `__TRIVIA_API_BASE__ = ""` for same-origin deploy
+- [ ] If UI is **not** on the same host as the API, set `CORS_ORIGINS` (and https `__TRIVIA_API_BASE__`)
 - [ ] Optional: `/health` configured as health check
 
 ---
