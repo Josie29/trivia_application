@@ -38,8 +38,13 @@ class LiveTriviaAssistant:
             model_size=Config.WHISPER_MODEL_SIZE,
             device=Config.WHISPER_DEVICE,
         )
-        self.extractor = QuestionExtractor(api_key=os.getenv("OPENAI_API_KEY"))
-        self.excel_manager = TriviaExcelManager()
+
+        if Config.ENABLE_QUESTION_EXTRACTION:
+            self.extractor = QuestionExtractor(api_key=os.getenv("OPENAI_API_KEY"))
+            self.excel_manager = TriviaExcelManager()
+        else:
+            self.extractor = None
+            self.excel_manager = None
 
         self.processor = SlidingWindowProcessor(
             stream_capture=self.stream_capture,
@@ -49,6 +54,7 @@ class LiveTriviaAssistant:
             window_duration=Config.WINDOW_DURATION,
             overlap_duration=Config.OVERLAP_DURATION,
             on_transcription=on_transcription,
+            enable_question_extraction=Config.ENABLE_QUESTION_EXTRACTION,
         )
 
         self.is_running = False

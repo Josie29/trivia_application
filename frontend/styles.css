@@ -1,0 +1,241 @@
+/* ── Theme colours ─────────────────────────────────────── */
+:root {
+  --color-primary:        #6366f1;
+  --color-primary-hover:  #4f46e5;
+  --color-primary-light:  #eef2ff;
+  --color-secondary:      #f59e0b;
+  --color-secondary-hover:#d97706;
+
+  --color-bg:             #f8fafc;
+  --color-surface:        #ffffff;
+  --color-border:         #e2e8f0;
+  --color-text:           #1e293b;
+  --color-text-muted:     #64748b;
+  --color-error:          #dc2626;
+  --color-error-bg:       #fef2f2;
+  --color-success:        #16a34a;
+  --color-success-bg:     #f0fdf4;
+}
+
+/* ── Reset / base ──────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 4rem;
+}
+
+/* ── Header ────────────────────────────────────────────── */
+header {
+  width: 100%;
+  max-width: 44rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.logo-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.35rem;
+  color: var(--color-text);
+}
+
+header p {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+header code {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+/* ── Card ──────────────────────────────────────────────── */
+.card {
+  width: 100%;
+  max-width: 44rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.75rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04);
+}
+
+/* ── Form elements ─────────────────────────────────────── */
+label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.4rem;
+}
+
+.input-wrap {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+
+.input-wrap svg {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+input[type="url"] {
+  width: 100%;
+  padding: 0.6rem 0.75rem 0.6rem 2.25rem;
+  font-size: 0.9rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+input[type="url"]:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+/* ── Buttons ───────────────────────────────────────────── */
+.actions {
+  display: flex;
+  gap: 0.625rem;
+  margin-bottom: 1.25rem;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+button:active { transform: scale(0.97); }
+
+#btnStart {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+#btnStart:hover { background: var(--color-primary-hover); }
+
+#btnStop {
+  background: var(--color-secondary);
+  color: #fff;
+}
+
+#btnStop:hover { background: var(--color-secondary-hover); }
+
+/* ── Status bar ────────────────────────────────────────── */
+#status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  background: transparent;
+  color: var(--color-text-muted);
+  transition: background 0.2s, color 0.2s;
+}
+
+#status.error {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+#status.success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+}
+
+/* ── Transcript ────────────────────────────────────────── */
+.transcript-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.transcript-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+#transcript {
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  min-height: 12rem;
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--color-bg);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+#transcript:empty::before {
+  content: "Transcript will appear here once the stream starts…";
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+#transcript::-webkit-scrollbar { width: 6px; }
+#transcript::-webkit-scrollbar-track { background: transparent; }
+#transcript::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}

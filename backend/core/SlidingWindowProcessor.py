@@ -22,6 +22,7 @@ class SlidingWindowProcessor:
         window_duration=30,
         overlap_duration=15,
         on_transcription: Optional[Callable[[str], None]] = None,
+        enable_question_extraction: bool = True,
     ):
         """Process overlapping audio windows from a live stream.
 
@@ -29,17 +30,23 @@ class SlidingWindowProcessor:
             stream_capture: Source of raw audio (e.g. live Twitch capture).
             transcriber: Component that turns audio buffers into text.
             extractor: LLM-backed extractor for structured question fields.
+                       Ignored when ``enable_question_extraction`` is False.
             excel_manager: Persists extracted questions.
+                           Ignored when ``enable_question_extraction`` is False.
             window_duration: Seconds of audio per processing window.
             overlap_duration: Seconds between window starts (slide step).
             on_transcription: Optional callback invoked with each non-duplicate
                 transcription text after the minimum-length filter, before
                 question extraction.
+            enable_question_extraction: When False the LLM extraction step and
+                Excel persistence are skipped entirely; only transcription and
+                the ``on_transcription`` callback run.
         """
         self.stream_capture = stream_capture
         self.transcriber = transcriber
         self.extractor = extractor
         self.excel_manager = excel_manager
+        self.enable_question_extraction = enable_question_extraction
 
         self.window_duration = window_duration
         self.overlap_duration = overlap_duration
@@ -110,7 +117,10 @@ class SlidingWindowProcessor:
         self.recent_transcriptions.append(transcription)
         if self.on_transcription is not None:
             self.on_transcription(transcription)
-        
+
+        if not self.enable_question_extraction:
+            return
+
         # Extract question information using LLM
         question_info = self.extractor.extract_question_info(transcription)
         
@@ -120,14 +130,13 @@ class SlidingWindowProcessor:
             return
         
         logger.info(f"Question detected: {question_info['question_text'][:60]}...")
-        
         # Update hour if specified
         if question_info.get("hour_number"):
             if question_info["hour_number"] != self.current_hour:
                 self.current_hour = question_info["hour_number"]
                 self.question_count = 0
                 logger.info(f"Switched to Hour {self.current_hour}")
-        
+
         # Check if this question was already saved
         if self._is_duplicate_question(question_info["question_text"]):
             logger.info("Question already saved (skipping)")

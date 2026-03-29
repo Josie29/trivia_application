@@ -3,141 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trivia — Live transcription</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
-    label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
-    input[type="url"] { width: 100%; padding: 0.5rem; box-sizing: border-box; margin-bottom: 1rem; }
-    .actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-    button { padding: 0.5rem 1rem; cursor: pointer; }
-    #status { min-height: 1.25rem; color: #333; margin-bottom: 0.5rem; }
-    #status.error { color: #a00; }
-    #transcript {
-      border: 1px solid #ccc; border-radius: 4px; padding: 1rem;
-      min-height: 12rem; max-height: 24rem; overflow: auto; white-space: pre-wrap;
-      background: #fafafa; font-size: 0.95rem;
-    }
-    p.hint { font-size: 0.85rem; color: #555; }
-  </style>
+  <title>Trivia — Live Transcription</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>Live transcription</h1>
-  <p class="hint">For local dev or Render (UI served with the API), leave <code>config.js</code> base URL empty and run <code>python run.py</code> from <code>backend/</code> locally. Requires an active Twitch stream.</p>
 
-  <label for="twitchUrl">Twitch channel URL</label>
-  <input id="twitchUrl" type="url" value="https://m.twitch.tv/neglagonave" placeholder="https://www.twitch.tv/channel" autocomplete="off" />
+  <header>
+    <h1><span class="logo-dot"></span>Live Transcription</h1>
+    <p>
+      For local dev, leave <code>config.js</code> base URL empty and run
+      <code>python run.py</code> from <code>backend/</code>. Requires an active Twitch stream.
+    </p>
+  </header>
 
-  <div class="actions">
-    <button type="button" id="btnStart">Start</button>
-    <button type="button" id="btnStop">Stop</button>
+  <div class="card">
+    <label for="twitchUrl">Twitch channel URL</label>
+    <div class="input-wrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </svg>
+      <input id="twitchUrl" type="url" value="https://m.twitch.tv/neglagonave"
+        placeholder="https://www.twitch.tv/channel" autocomplete="off" />
+    </div>
+
+    <div class="actions">
+      <button type="button" id="btnStart">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start
+      </button>
+      <button type="button" id="btnStop">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        Stop
+      </button>
+    </div>
+
+    <div id="status" aria-live="polite"></div>
+
+    <div class="transcript-header">
+      <span class="transcript-label">Transcript</span>
+    </div>
+    <div id="transcript" aria-label="Transcription output"></div>
   </div>
 
-  <div id="status" aria-live="polite"></div>
-  <div id="transcript" aria-label="Transcription output"></div>
-
   <script src="config.js"></script>
-  <script>
-    const API_BASE =
-      typeof window.__TRIVIA_API_BASE__ === "string"
-        ? window.__TRIVIA_API_BASE__.replace(/\/$/, "")
-        : "";
-    function apiUrl(path) {
-      const p = path.startsWith("/") ? path : "/" + path;
-      return API_BASE ? API_BASE + p : p;
-    }
-
-    const statusEl = document.getElementById("status");
-    const transcriptEl = document.getElementById("transcript");
-    const urlInput = document.getElementById("twitchUrl");
-    let es = null;
-
-    function setStatus(msg, isError) {
-      statusEl.textContent = msg || "";
-      statusEl.classList.toggle("error", !!isError);
-    }
-
-    function closeStream() {
-      if (es) {
-        es.close();
-        es = null;
-      }
-    }
-
-    function appendTranscript(text) {
-      const line = document.createTextNode(text + "\n\n");
-      transcriptEl.appendChild(line);
-      transcriptEl.scrollTop = transcriptEl.scrollHeight;
-    }
-
-    function openEventSource() {
-      closeStream();
-      es = new EventSource(apiUrl("/api/transcription/stream"));
-      es.onmessage = function (ev) {
-        try {
-          const data = JSON.parse(ev.data);
-          if (data && typeof data.text === "string") {
-            appendTranscript(data.text);
-          }
-        } catch (err) {
-          setStatus("Bad event data from server", true);
-        }
-      };
-      es.onerror = function () {
-        setStatus("Transcription stream disconnected (stop or network).", true);
-        closeStream();
-      };
-    }
-
-    document.getElementById("btnStart").addEventListener("click", async function () {
-      setStatus("");
-      const twitchUrl = urlInput.value.trim();
-      if (!twitchUrl) {
-        setStatus("Enter a Twitch URL.", true);
-        return;
-      }
-      try {
-        const res = await fetch(apiUrl("/api/start"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ twitch_url: twitchUrl }),
-        });
-        const bodyText = await res.text();
-        let detail = bodyText;
-        try {
-          const j = JSON.parse(bodyText);
-          detail = j.detail ? (Array.isArray(j.detail) ? j.detail.map(function (d) { return d.msg || d; }).join(" ") : j.detail) : JSON.stringify(j);
-        } catch (_) { /* use raw */ }
-        if (!res.ok) {
-          setStatus("Start failed (" + res.status + "): " + detail, true);
-          return;
-        }
-        transcriptEl.textContent = "";
-        setStatus("Running. Transcription lines appear below.");
-        openEventSource();
-      } catch (err) {
-        setStatus("Network error: " + err.message, true);
-      }
-    });
-
-    document.getElementById("btnStop").addEventListener("click", async function () {
-      closeStream();
-      try {
-        const res = await fetch(apiUrl("/api/stop"), { method: "POST" });
-        const bodyText = await res.text();
-        let detail = bodyText;
-        try {
-          const j = JSON.parse(bodyText);
-          detail = j.detail != null ? String(j.detail) : JSON.stringify(j);
-        } catch (_) { /* use raw */ }
-        if (!res.ok) {
-          setStatus("Stop failed (" + res.status + "): " + detail, true);
-          return;
-        }
-        setStatus("Stopped.");
-      } catch (err) {
-        setStatus("Network error: " + err.message, true);
-      }
-    });
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
