@@ -8,7 +8,7 @@ Static and lightweight Python UI assets for the trivia assistant. There is **no 
 
 | File | Role |
 |------|------|
-| [`index.html`](index.html) | **Web UI** — Twitch URL field, Start/Stop, live transcript via Server-Sent Events; highlight transcript text to capture it as a question (hour / Q# fields and copy) |
+| [`index.html`](index.html) | **Web UI** — Twitch URL field, Start/Stop, live transcript via Server-Sent Events; capture transcript selections (hour / Q#), **shared question log** (separate column) via `/api/questions` |
 | [`config.js`](config.js) | **API base URL** — leave `""` when the UI is served with the API (local `python run.py` or Render Docker); set a full `https://…` base only if you intentionally split UI and API hosts |
 | [`StatusGUI.py`](StatusGUI.py) | **Optional Tkinter window** — shows hour, question count, and a simple LIVE status when wired to a `SlidingWindowProcessor` (not used by `main.py` or the API out of the box) |
 
@@ -34,6 +34,7 @@ The page calls:
 - `POST /api/start` with `{ "twitch_url": "..." }`
 - `GET /api/transcription/stream` (EventSource)
 - `POST /api/stop`
+- `GET /api/questions` and `POST /api/questions` (shared log for all viewers)
 
 Full API details, env vars, and deployment notes are in [`../backend/README.md`](../backend/README.md).
 

@@ -96,15 +96,39 @@ header code {
   border-radius: 999px;
 }
 
+/* ── Main layout (stream + shared log) ─────────────────── */
+.main-layout {
+  width: 100%;
+  max-width: 90rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .main-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(26rem, 40rem);
+  }
+
+  .card-question-log {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
 /* ── Card ──────────────────────────────────────────────── */
 .card {
   width: 100%;
-  max-width: 44rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1.75rem;
   box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04);
+}
+
+.card-stream {
+  min-width: 0;
 }
 
 /* ── Form elements ─────────────────────────────────────── */
@@ -393,17 +417,6 @@ button.is-loading::before {
   background: var(--color-primary-hover);
 }
 
-.btn-secondary {
-  background: var(--color-bg);
-  color: var(--color-text);
-  border: 1.5px solid var(--color-border);
-}
-
-.btn-secondary:hover {
-  background: var(--color-surface);
-  border-color: var(--color-text-muted);
-}
-
 @media (max-width: 28rem) {
   .question-meta-row {
     grid-template-columns: 1fr;
@@ -423,6 +436,97 @@ button.is-loading::before {
 
 .capture-feedback.is-success {
   color: var(--color-success);
+}
+
+/* ── Shared question log (right column) ────────────────── */
+.card-question-log-hint {
+  margin-bottom: 0.85rem;
+}
+
+.question-log {
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  min-height: 10rem;
+  max-height: min(32rem, calc(100vh - 12rem));
+  overflow: auto;
+  background: var(--color-bg);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.question-log-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.question-log-hour {
+  margin-bottom: 1.25rem;
+}
+
+.question-log-hour:last-child {
+  margin-bottom: 0;
+}
+
+.question-log-hour-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-primary);
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.question-log-item {
+  margin-bottom: 0.85rem;
+  padding-left: 0.35rem;
+  border-left: 3px solid var(--color-primary-light);
+}
+
+.question-log-item:last-child {
+  margin-bottom: 0;
+}
+
+.question-log-meta {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.question-log-body {
+  color: var(--color-text);
+  white-space: pre-wrap;
+}
+
+.question-log-updated {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+#btnSaveToLog {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+#btnSaveToLog:hover {
+  background: var(--color-primary-hover);
+}
+
+#questionLog::-webkit-scrollbar {
+  width: 6px;
+}
+#questionLog::-webkit-scrollbar-track {
+  background: transparent;
+}
+#questionLog::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
 }
 
 /* ── Animations ────────────────────────────────────────── */

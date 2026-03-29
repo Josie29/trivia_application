@@ -28,68 +28,81 @@
     </span>
   </div>
 
-  <div class="card">
-    <label for="twitchUrl">Twitch channel URL</label>
-    <div class="input-wrap">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-      </svg>
-      <input id="twitchUrl" type="url" placeholder="https://www.twitch.tv/channel" autocomplete="off" />
-    </div>
-
-    <div class="actions">
-      <button type="button" id="btnStart">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <span id="btnStartLabel">Start Session</span>
-      </button>
-      <button type="button" id="btnStop">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-        Stop
-      </button>
-    </div>
-
-    <div id="status" aria-live="polite"></div>
-
-    <div id="progress-wrap" hidden>
-      <div class="progress-meta">
-        <span class="progress-label">Next segment</span>
-        <span id="progress-countdown"></span>
+  <div class="main-layout">
+    <div class="card card-stream">
+      <label for="twitchUrl">Twitch channel URL</label>
+      <div class="input-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        <input id="twitchUrl" type="url" placeholder="https://www.twitch.tv/channel" autocomplete="off" />
       </div>
-      <div class="progress-track">
-        <div id="progress-bar"></div>
+
+      <div class="actions">
+        <button type="button" id="btnStart">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span id="btnStartLabel">Start Session</span>
+        </button>
+        <button type="button" id="btnStop">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          Stop
+        </button>
       </div>
-    </div>
 
-    <div class="transcript-header">
-      <span class="transcript-label">Live Transcript</span>
-    </div>
-    <div id="transcript" aria-label="Live transcription output" tabindex="0"></div>
+      <div id="status" aria-live="polite"></div>
 
-    <section class="question-capture" aria-labelledby="question-capture-heading">
+      <div id="progress-wrap" hidden>
+        <div class="progress-meta">
+          <span class="progress-label">Next segment</span>
+          <span id="progress-countdown"></span>
+        </div>
+        <div class="progress-track">
+          <div id="progress-bar"></div>
+        </div>
+      </div>
+
       <div class="transcript-header">
-        <span class="transcript-label" id="question-capture-heading">Captured question</span>
+        <span class="transcript-label">Live Transcript</span>
       </div>
-      <p class="capture-hint">
-        Highlight text in the live transcript, then use the button below to move it here for editing and copy-paste.
+      <div id="transcript" aria-label="Live transcription output" tabindex="0"></div>
+
+      <section class="question-capture" aria-labelledby="question-capture-heading">
+        <div class="transcript-header">
+          <span class="transcript-label" id="question-capture-heading">Captured question</span>
+        </div>
+        <p class="capture-hint">
+          Highlight text in the live transcript, then use the button below to move it here for editing.
+        </p>
+        <div class="question-meta-row">
+          <div class="field-inline">
+            <label for="questionHour">Hour</label>
+            <input id="questionHour" type="number" inputmode="numeric" min="1" placeholder="e.g. 1" autocomplete="off" />
+          </div>
+          <div class="field-inline">
+            <label for="questionNumber">Question #</label>
+            <input id="questionNumber" type="number" inputmode="numeric" min="1" placeholder="e.g. 5" autocomplete="off" />
+          </div>
+        </div>
+        <label for="questionText">Question text</label>
+        <textarea id="questionText" rows="5" placeholder="Selected text appears here. Edit if needed, then save to the shared log."></textarea>
+        <p id="captureFeedback" class="capture-feedback" role="status" aria-live="polite" hidden></p>
+        <div class="question-actions">
+          <button type="button" id="btnUseSelection">Use selection as question</button>
+          <button type="button" id="btnSaveToLog" class="btn-save-log">Save to shared log</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="card card-question-log" aria-labelledby="question-log-heading">
+      <div class="transcript-header">
+        <span class="transcript-label" id="question-log-heading">Shared question log</span>
+      </div>
+      <p class="capture-hint card-question-log-hint">
+        Saved questions are stored on the server so everyone using this app sees the same list.
+        Questions are grouped by hour; within each hour they are ordered by question number.
       </p>
-      <div class="question-meta-row">
-        <div class="field-inline">
-          <label for="questionHour">Hour</label>
-          <input id="questionHour" type="number" inputmode="numeric" min="1" placeholder="e.g. 1" autocomplete="off" />
-        </div>
-        <div class="field-inline">
-          <label for="questionNumber">Question #</label>
-          <input id="questionNumber" type="number" inputmode="numeric" min="1" placeholder="e.g. 5" autocomplete="off" />
-        </div>
-      </div>
-      <label for="questionText">Question text</label>
-      <textarea id="questionText" rows="5" placeholder="Selected text appears here. You can edit it before copying."></textarea>
-      <p id="captureFeedback" class="capture-feedback" role="status" aria-live="polite" hidden></p>
-      <div class="question-actions">
-        <button type="button" id="btnUseSelection">Use selection as question</button>
-        <button type="button" id="btnCopyQuestion" class="btn-secondary">Copy formatted</button>
-      </div>
+      <div id="questionLog" class="question-log" role="region" aria-label="Saved questions for all viewers"></div>
     </section>
   </div>
 
