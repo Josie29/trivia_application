@@ -51,8 +51,8 @@ class LiveTriviaAssistant:
             transcriber=self.transcriber,
             extractor=self.extractor,
             excel_manager=self.excel_manager,
-            window_duration=Config.WINDOW_DURATION,
-            overlap_duration=Config.OVERLAP_DURATION,
+            audio_window_seconds=Config.AUDIO_WINDOW_SECONDS,
+            segment_interval_seconds=Config.SEGMENT_INTERVAL_SECONDS,
             on_transcription=on_transcription,
             enable_question_extraction=Config.ENABLE_QUESTION_EXTRACTION,
         )

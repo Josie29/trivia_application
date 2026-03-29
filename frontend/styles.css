@@ -169,6 +169,27 @@ button {
 
 button:active { transform: scale(0.97); }
 
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+button.is-loading {
+  gap: 0.55rem;
+}
+
+button.is-loading::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
 #btnStart {
   background: var(--color-primary);
   color: #fff;
@@ -217,6 +238,47 @@ button:active { transform: scale(0.97); }
   background: currentColor;
 }
 
+/* ── Progress bar ──────────────────────────────────────── */
+#progress-wrap {
+  margin-bottom: 1rem;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.progress-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+#progress-countdown {
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+#progress-bar {
+  height: 100%;
+  width: 100%;
+  background: var(--color-primary);
+  border-radius: 999px;
+  transform-origin: left;
+  transition: width 1s linear;
+}
+
 /* ── Transcript ────────────────────────────────────────── */
 .transcript-header {
   display: flex;
@@ -251,6 +313,22 @@ button:active { transform: scale(0.97); }
   content: "Transcription will appear here once the session starts…";
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+/* ── Animations ────────────────────────────────────────── */
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes indeterminate-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(186%); }
+}
+
+#progress-bar.is-indeterminate {
+  width: 35%;
+  transition: none;
+  animation: indeterminate-slide 1.3s ease-in-out infinite alternate;
 }
 
 /* ── Scrollbar ─────────────────────────────────────────── */
