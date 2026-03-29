@@ -369,6 +369,11 @@ button.is-loading::before {
   font-style: italic;
 }
 
+#transcript .transcript-no-audio {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 /* ── Question capture ──────────────────────────────────── */
 .question-capture {
   margin-top: 1.75rem;

@@ -59,7 +59,12 @@ class HealthResponse(BaseModel):
 class TranscriptionEvent(BaseModel):
     """One SSE ``data:`` JSON payload for a transcription chunk."""
 
-    text: str = Field(description="Transcribed text for this window")
+    text: str = Field(
+        description=(
+            "Transcribed text for this window, or the fixed placeholder "
+            "``[no audio this chunk]`` when there was no usable audio or speech"
+        ),
+    )
 
 
 class SessionConfigResponse(BaseModel):

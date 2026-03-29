@@ -77,17 +77,68 @@ function setStartBtn(state) {
 
 // ── Transcript ───────────────────────────────────────────────────────────────
 
+/** Must match backend ``SlidingWindowProcessor.NO_AUDIO_CHUNK_MESSAGE``. */
+const NO_AUDIO_CHUNK_TEXT = "[no audio this chunk]";
+
+/**
+ * If the gap between SSE chunks exceeds the usual overlap interval plus this many
+ * milliseconds, insert a line break before the next segment (detects stalls / pauses).
+ */
+const PAUSE_BEYOND_OVERLAP_MS = 3000;
+
+const DEFAULT_OVERLAP_SECONDS = 15;
+/** Server overlap window (seconds); used for progress bar and pause-vs-flow transcript spacing. */
+let overlapDuration = DEFAULT_OVERLAP_SECONDS;
+
+/** Wall time of the previous transcript chunk (for pause detection). */
+let lastTranscriptChunkAt = null;
+
 function clearTranscript() {
   transcriptEl.textContent = "";
+  lastTranscriptChunkAt = null;
 }
 
+/**
+ * Appends a transcript segment. Normal chunks use a space when the next chunk
+ * arrives on schedule; a line break is used when the gap is unusually long (pause)
+ * or when showing the server “no audio” placeholder (with blank lines around it).
+ *
+ * @param {string} text - Segment text from SSE.
+ */
 function appendTranscript(text) {
   const chunk = String(text ?? "").trim();
   if (!chunk) return;
+  const isNoAudioMarker = chunk === NO_AUDIO_CHUNK_TEXT;
+  const now = Date.now();
+
   if (transcriptEl.textContent.length > 0) {
-    transcriptEl.appendChild(document.createTextNode(" "));
+    const gap = lastTranscriptChunkAt != null ? now - lastTranscriptChunkAt : 0;
+    const expectedMs = Math.max(1, overlapDuration) * 1000;
+    const longPause =
+      lastTranscriptChunkAt != null && gap >= expectedMs + PAUSE_BEYOND_OVERLAP_MS;
+
+    let sep;
+    if (longPause) {
+      sep = "\n";
+    } else if (isNoAudioMarker) {
+      sep = "\n";
+    } else {
+      sep = " ";
+    }
+    transcriptEl.appendChild(document.createTextNode(sep));
   }
-  transcriptEl.appendChild(document.createTextNode(chunk));
+
+  if (isNoAudioMarker) {
+    const span = document.createElement("span");
+    span.className = "transcript-no-audio";
+    span.textContent = chunk;
+    transcriptEl.appendChild(span);
+    transcriptEl.appendChild(document.createTextNode("\n"));
+  } else {
+    transcriptEl.appendChild(document.createTextNode(chunk));
+  }
+
+  lastTranscriptChunkAt = Date.now();
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
@@ -343,8 +394,6 @@ async function handleSaveToSharedLog() {
 
 // ── Progress bar ─────────────────────────────────────────────────────────────
 
-const DEFAULT_OVERLAP_SECONDS = 15;
-let overlapDuration = DEFAULT_OVERLAP_SECONDS;
 let countdownTimer  = null;
 let secondsLeft     = 0;
 
