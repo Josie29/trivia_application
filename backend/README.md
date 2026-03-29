@@ -59,8 +59,8 @@ TWITCH_CHANNEL_URL=https://www.twitch.tv/your_channel
 # Optional (defaults shown)
 WHISPER_MODEL_SIZE=base
 WHISPER_DEVICE=cpu
-WINDOW_DURATION=30
-OVERLAP_DURATION=15
+AUDIO_WINDOW_SECONDS=30
+SEGMENT_INTERVAL_SECONDS=15
 LOG_LEVEL=INFO
 
 # Optional: extra browser origins if UI and API are on different hosts (comma-separated, no spaces)
@@ -108,6 +108,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | `GET` | `/health` | Liveness |
 | `POST` | `/api/start` | Body: `{"twitch_url": "https://www.twitch.tv/..."}` |
 | `POST` | `/api/stop` | Stop session |
+| `GET` | `/api/config` | JSON: `audio_window_seconds`, `segment_interval_seconds` (progress bar + UI timing) |
 | `GET` | `/api/transcription/stream` | SSE: JSON lines `{"text": "..."}` |
 | `GET` | `/api/questions` | Shared question log: sorted by hour, then question number |
 | `POST` | `/api/questions` | Body: `{"hour": 1, "question_number": 2, "text": "..."}` — upsert; response includes `overwritten` |

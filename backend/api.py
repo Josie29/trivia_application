@@ -230,8 +230,8 @@ def create_app() -> FastAPI:
             SessionConfigResponse: Window and overlap durations in seconds.
         """
         return SessionConfigResponse(
-            window_duration=Config.WINDOW_DURATION,
-            overlap_duration=Config.OVERLAP_DURATION,
+            audio_window_seconds=Config.AUDIO_WINDOW_SECONDS,
+            segment_interval_seconds=Config.SEGMENT_INTERVAL_SECONDS,
         )
 
     @app.post("/api/start", response_model=StartSessionResponse)

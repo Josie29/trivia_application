@@ -45,15 +45,6 @@ const btnUseSelection    = document.getElementById("btnUseSelection");
 const btnSaveToLog       = document.getElementById("btnSaveToLog");
 const captureFeedbackEl  = document.getElementById("captureFeedback");
 const questionLogEl      = document.getElementById("questionLog");
-const statusEl      = document.getElementById("status");
-const transcriptEl  = document.getElementById("transcript");
-const urlInput      = document.getElementById("twitchUrl");
-const progressWrap  = document.getElementById("progress-wrap");
-const progressBar   = document.getElementById("progress-bar");
-const progressLabel = document.getElementById("progress-countdown");
-const btnStart      = document.getElementById("btnStart");
-const btnStartLabel = document.getElementById("btnStartLabel");
-const btnStop       = document.getElementById("btnStop");
 
 // ── Status bar ───────────────────────────────────────────────────────────────
 
@@ -84,42 +75,23 @@ function setStartBtn(state) {
   }
 }
 
-// ── Button states ─────────────────────────────────────────────────────────────
-
-function setStartBtn(state) {
-  // state: "idle" | "connecting" | "running"
-  if (state === "connecting") {
-    btnStart.disabled = true;
-    btnStart.classList.add("is-loading");
-    btnStartLabel.textContent = "Connecting…";
-    btnStop.disabled = true;
-  } else if (state === "running") {
-    btnStart.disabled = true;
-    btnStart.classList.remove("is-loading");
-    btnStartLabel.textContent = "Start Session";
-    btnStop.disabled = false;
-  } else {
-    btnStart.disabled = false;
-    btnStart.classList.remove("is-loading");
-    btnStartLabel.textContent = "Start Session";
-    btnStop.disabled = false;
-  }
-}
-
 // ── Transcript ───────────────────────────────────────────────────────────────
 
 /** Must match backend ``SlidingWindowProcessor.NO_AUDIO_CHUNK_MESSAGE``. */
 const NO_AUDIO_CHUNK_TEXT = "[no audio this chunk]";
 
 /**
- * If the gap between SSE chunks exceeds the usual overlap interval plus this many
+ * If the gap between SSE chunks exceeds the usual segment interval plus this many
  * milliseconds, insert a line break before the next segment (detects stalls / pauses).
  */
 const PAUSE_BEYOND_OVERLAP_MS = 3000;
 
-const DEFAULT_OVERLAP_SECONDS = 15;
-/** Server overlap window (seconds); used for progress bar and pause-vs-flow transcript spacing. */
-let overlapDuration = DEFAULT_OVERLAP_SECONDS;
+const DEFAULT_SEGMENT_INTERVAL_SECONDS = 15;
+const DEFAULT_AUDIO_WINDOW_SECONDS = 30;
+/** Seconds between transcription triggers (matches server ``SEGMENT_INTERVAL_SECONDS``). */
+let segmentIntervalSeconds = DEFAULT_SEGMENT_INTERVAL_SECONDS;
+/** Seconds of audio per Whisper window (matches ``AUDIO_WINDOW_SECONDS``). */
+let audioWindowSeconds = DEFAULT_AUDIO_WINDOW_SECONDS;
 
 /** Wall time of the previous transcript chunk (for pause detection). */
 let lastTranscriptChunkAt = null;
@@ -144,7 +116,7 @@ function appendTranscript(text) {
 
   if (transcriptEl.textContent.length > 0) {
     const gap = lastTranscriptChunkAt != null ? now - lastTranscriptChunkAt : 0;
-    const expectedMs = Math.max(1, overlapDuration) * 1000;
+    const expectedMs = Math.max(1, segmentIntervalSeconds) * 1000;
     const longPause =
       lastTranscriptChunkAt != null && gap >= expectedMs + PAUSE_BEYOND_OVERLAP_MS;
 
@@ -425,71 +397,18 @@ async function handleSaveToSharedLog() {
 
 // ── Progress bar ─────────────────────────────────────────────────────────────
 
-let countdownTimer  = null;
-let secondsLeft     = 0;
-
-async function fetchSessionConfig() {
-  try {
-    const res = await fetch(apiUrl("/api/config"));
-    if (res.ok) {
-      const cfg = await res.json();
-      overlapDuration = cfg.overlap_duration ?? DEFAULT_OVERLAP_SECONDS;
-    }
-  } catch (_) {
-    // Fall back to default — progress bar still works
-  }
-}
-
-function startCountdown() {
-  stopCountdown();
-  progressBar.classList.remove("is-indeterminate");
-  secondsLeft = overlapDuration;
-  progressWrap.hidden = false;
-  tickCountdown();
-
-  countdownTimer = setInterval(() => {
-    secondsLeft = Math.max(0, secondsLeft - 1);
-    tickCountdown();
-  }, 1000);
-}
-
-function tickCountdown() {
-  const pct = (secondsLeft / overlapDuration) * 100;
-  progressBar.style.width = pct + "%";
-  progressLabel.textContent = secondsLeft + "s";
-}
-
-function showWarmupBar() {
-  stopCountdown();
-  progressBar.style.width = "35%";
-  progressBar.classList.add("is-indeterminate");
-  progressLabel.textContent = "warming up…";
-  progressWrap.hidden = false;
-}
-
-function stopCountdown() {
-  clearInterval(countdownTimer);
-  countdownTimer = null;
-  progressBar.classList.remove("is-indeterminate");
-  progressWrap.hidden = true;
-}
-
-// ── Progress bar ─────────────────────────────────────────────────────────────
-
-const DEFAULT_AUDIO_WINDOW_SECONDS    = 30;
-const DEFAULT_SEGMENT_INTERVAL_SECONDS = 15;
-let audioWindowSeconds    = DEFAULT_AUDIO_WINDOW_SECONDS;
-let segmentIntervalSeconds = DEFAULT_SEGMENT_INTERVAL_SECONDS;
 let countdownTimer = null;
-let secondsLeft    = 0;
+let secondsLeft = 0;
 
 async function fetchSessionConfig() {
   try {
     const res = await fetch(apiUrl("/api/config"));
     if (res.ok) {
       const cfg = await res.json();
-      audioWindowSeconds    = cfg.audio_window_seconds    ?? DEFAULT_AUDIO_WINDOW_SECONDS;
-      segmentIntervalSeconds = cfg.segment_interval_seconds ?? DEFAULT_SEGMENT_INTERVAL_SECONDS;
+      audioWindowSeconds =
+        cfg.audio_window_seconds ?? DEFAULT_AUDIO_WINDOW_SECONDS;
+      segmentIntervalSeconds =
+        cfg.segment_interval_seconds ?? DEFAULT_SEGMENT_INTERVAL_SECONDS;
     }
   } catch (_) {
     // Fall back to defaults — progress bar still works
@@ -499,7 +418,7 @@ async function fetchSessionConfig() {
 function startCountdown() {
   stopCountdown();
   progressBar.classList.remove("is-indeterminate");
-  secondsLeft = audioWindowSeconds;
+  secondsLeft = segmentIntervalSeconds;
   progressWrap.hidden = false;
   tickCountdown();
 
@@ -510,7 +429,8 @@ function startCountdown() {
 }
 
 function tickCountdown() {
-  const pct = (secondsLeft / audioWindowSeconds) * 100;
+  const denom = Math.max(1, segmentIntervalSeconds);
+  const pct = (secondsLeft / denom) * 100;
   progressBar.style.width = pct + "%";
   progressLabel.textContent = secondsLeft + "s";
 }
@@ -540,14 +460,10 @@ function closeStream() {
     activeStream = null;
   }
   stopCountdown();
-  stopCountdown();
 }
 
 function openStream() {
   closeStream();
-  showWarmupBar();
-
-  let firstSegment = true;
   showWarmupBar();
 
   let firstSegment = true;
@@ -565,15 +481,6 @@ function openStream() {
         appendTranscript(data.text);
         startCountdown();
       }
-      if (data && typeof data.text === "string") {
-        if (firstSegment) {
-          firstSegment = false;
-          setStatus("Running — transcription lines appear below.", "success");
-          setStartBtn("running");
-        }
-        appendTranscript(data.text);
-        startCountdown();
-      }
     } catch (_) {
       setStatus("Bad event data from server.", "error");
     }
@@ -581,7 +488,6 @@ function openStream() {
 
   activeStream.onerror = function () {
     setStatus("Stream disconnected (stopped or network error).", "error");
-    setStartBtn("idle");
     setStartBtn("idle");
     closeStream();
   };
@@ -603,12 +509,6 @@ async function handleStart() {
   // Always fetch config fresh so any .env changes take effect without a page reload.
   await fetchSessionConfig();
 
-  setStartBtn("connecting");
-  setStatus("Connecting to stream…");
-
-  // Always fetch config fresh so any .env changes take effect without a page reload.
-  await fetchSessionConfig();
-
   try {
     const res = await fetch(apiUrl("/api/start"), {
       method: "POST",
@@ -620,24 +520,20 @@ async function handleStart() {
       const detail = parseErrorDetail(await res.text());
       setStatus(`Start failed (${res.status}): ${detail}`, "error");
       setStartBtn("idle");
-      setStartBtn("idle");
       return;
     }
 
     clearTranscript();
     setStatus("Warming up — processing first audio window…");
-    setStatus("Warming up — processing first audio window…");
     openStream();
   } catch (err) {
     setStatus("Network error: " + err.message, "error");
-    setStartBtn("idle");
     setStartBtn("idle");
   }
 }
 
 async function handleStop() {
   closeStream();
-  setStartBtn("idle");
   setStartBtn("idle");
 
   try {
@@ -669,5 +565,3 @@ btnSaveToLog.addEventListener("click", function () {
 window.addEventListener("beforeunload", function () {
   stopQuestionLogPolling();
 });
-btnStart.addEventListener("click", handleStart);
-btnStop.addEventListener("click", handleStop);
