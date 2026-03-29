@@ -34,7 +34,7 @@ Keep [`frontend/config.js`](frontend/config.js) as `window.__TRIVIA_API_BASE__ =
 | `CORS_ORIGINS` | Usually no | Comma-separated extra origins only if users open the UI on a **different** host than where the API runs (unusual for this setup). No spaces. Must match the browser `Origin` exactly (`https://…`, no trailing slash). If you add a **custom domain** in front of Render, add that origin here too when it differs from `RENDER_EXTERNAL_URL`. |
 | `WHISPER_MODEL_SIZE` | No | Default `base`. Use `tiny` or `small` on tight RAM (free tier). |
 | `WHISPER_DEVICE` | No | Default `cpu`. |
-| `WINDOW_DURATION` / `OVERLAP_DURATION` | No | Override processing window sizes (seconds). |
+| `AUDIO_WINDOW_SECONDS` / `SEGMENT_INTERVAL_SECONDS` | No | Whisper window length and seconds between transcription runs (see `config.py`). |
 | `LOG_LEVEL` | No | Default `INFO`. |
 | `TWITCH_CHANNEL_URL` | No | Only for CLI (`main.py`); the web UI sends the URL per request. |
 

@@ -96,15 +96,39 @@ header code {
   border-radius: 999px;
 }
 
+/* ── Main layout (stream + shared log) ─────────────────── */
+.main-layout {
+  width: 100%;
+  max-width: 90rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .main-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(26rem, 40rem);
+  }
+
+  .card-question-log {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
 /* ── Card ──────────────────────────────────────────────── */
 .card {
   width: 100%;
-  max-width: 44rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1.75rem;
   box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04);
+}
+
+.card-stream {
+  min-width: 0;
 }
 
 /* ── Form elements ─────────────────────────────────────── */
@@ -142,9 +166,39 @@ input[type="url"] {
   outline: none;
 }
 
-input[type="url"]:focus {
+input[type="url"]:focus,
+input[type="number"]:focus,
+textarea:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+input[type="number"] {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.9rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  resize: vertical;
+  min-height: 6rem;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
 }
 
 /* ── Buttons ───────────────────────────────────────────── */
@@ -168,6 +222,27 @@ button {
 }
 
 button:active { transform: scale(0.97); }
+
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+button.is-loading {
+  gap: 0.55rem;
+}
+
+button.is-loading::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
 
 button:disabled {
   opacity: 0.65;
@@ -279,6 +354,47 @@ button.is-loading::before {
   transition: width 1s linear;
 }
 
+/* ── Progress bar ──────────────────────────────────────── */
+#progress-wrap {
+  margin-bottom: 1rem;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.progress-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+#progress-countdown {
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+#progress-bar {
+  height: 100%;
+  width: 100%;
+  background: var(--color-primary);
+  border-radius: 999px;
+  transform-origin: left;
+  transition: width 1s linear;
+}
+
 /* ── Transcript ────────────────────────────────────────── */
 .transcript-header {
   display: flex;
@@ -313,6 +429,171 @@ button.is-loading::before {
   content: "Transcription will appear here once the session starts…";
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+#transcript .transcript-no-audio {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ── Question capture ──────────────────────────────────── */
+.question-capture {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.capture-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+
+.question-meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.field-inline label {
+  margin-bottom: 0.3rem;
+}
+
+.question-capture > label[for="questionText"] {
+  margin-top: 0;
+}
+
+#questionText {
+  margin-bottom: 0.75rem;
+}
+
+.question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+#btnUseSelection {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+#btnUseSelection:hover {
+  background: var(--color-primary-hover);
+}
+
+@media (max-width: 28rem) {
+  .question-meta-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.capture-feedback {
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin: 0 0 0.65rem;
+  line-height: 1.4;
+}
+
+.capture-feedback.is-error {
+  color: var(--color-error);
+}
+
+.capture-feedback.is-success {
+  color: var(--color-success);
+}
+
+/* ── Shared question log (right column) ────────────────── */
+.card-question-log-hint {
+  margin-bottom: 0.85rem;
+}
+
+.question-log {
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  min-height: 10rem;
+  max-height: min(32rem, calc(100vh - 12rem));
+  overflow: auto;
+  background: var(--color-bg);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.question-log-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.question-log-hour {
+  margin-bottom: 1.25rem;
+}
+
+.question-log-hour:last-child {
+  margin-bottom: 0;
+}
+
+.question-log-hour-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-primary);
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.question-log-item {
+  margin-bottom: 0.85rem;
+  padding-left: 0.35rem;
+  border-left: 3px solid var(--color-primary-light);
+}
+
+.question-log-item:last-child {
+  margin-bottom: 0;
+}
+
+.question-log-meta {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.question-log-body {
+  color: var(--color-text);
+  white-space: pre-wrap;
+}
+
+.question-log-updated {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+#btnSaveToLog {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+#btnSaveToLog:hover {
+  background: var(--color-primary-hover);
+}
+
+#questionLog::-webkit-scrollbar {
+  width: 6px;
+}
+#questionLog::-webkit-scrollbar-track {
+  background: transparent;
+}
+#questionLog::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
 }
 
 /* ── Animations ────────────────────────────────────────── */

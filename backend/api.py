@@ -16,13 +16,18 @@ from starlette.staticfiles import StaticFiles
 
 from config import Config
 from core import LiveTriviaAssistant
+import question_log_store
 from schemas import (
     HealthResponse,
+    LoggedQuestion,
+    QuestionLogListResponse,
     SessionConfigResponse,
     StartSessionRequest,
     StartSessionResponse,
     StopSessionResponse,
     TranscriptionEvent,
+    UpsertQuestionRequest,
+    UpsertQuestionResponse,
 )
 from utils.logger import setup_logger
 
@@ -222,7 +227,7 @@ def create_app() -> FastAPI:
         """Return processing timing values so the frontend can drive the progress bar.
 
         Returns:
-            SessionConfigResponse: Audio window size and segment interval in seconds.
+            SessionConfigResponse: Window and overlap durations in seconds.
         """
         return SessionConfigResponse(
             audio_window_seconds=Config.AUDIO_WINDOW_SECONDS,
@@ -282,6 +287,51 @@ def create_app() -> FastAPI:
             )
 
         return StopSessionResponse(status="stopped", message="Session stopped.")
+
+    @app.get("/api/questions", response_model=QuestionLogListResponse)
+    def api_questions_list() -> QuestionLogListResponse:
+        """Return all saved questions for every client (sorted by hour, then Q#).
+
+        Returns:
+            QuestionLogListResponse: Shared in-memory log snapshot.
+        """
+        rows = question_log_store.list_sorted()
+        return QuestionLogListResponse(
+            questions=[
+                LoggedQuestion(
+                    hour=e.hour,
+                    question_number=e.question_number,
+                    text=e.text,
+                    updated_at=e.updated_at,
+                )
+                for e in rows
+            ],
+        )
+
+    @app.post("/api/questions", response_model=UpsertQuestionResponse)
+    def api_questions_upsert(body: UpsertQuestionRequest) -> UpsertQuestionResponse:
+        """Save or replace a question for the given hour and question number.
+
+        Args:
+            body: Hour, question number, and text.
+
+        Returns:
+            UpsertQuestionResponse: Whether a previous row was overwritten and the saved row.
+        """
+        overwritten, entry = question_log_store.upsert(
+            body.hour,
+            body.question_number,
+            body.text,
+        )
+        return UpsertQuestionResponse(
+            overwritten=overwritten,
+            question=LoggedQuestion(
+                hour=entry.hour,
+                question_number=entry.question_number,
+                text=entry.text,
+                updated_at=entry.updated_at,
+            ),
+        )
 
     @app.get("/api/transcription/stream")
     async def api_transcription_stream() -> StreamingResponse:

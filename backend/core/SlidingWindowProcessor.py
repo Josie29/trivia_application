@@ -12,6 +12,10 @@ from utils.logger import setup_logger, setup_transcription_logger
 logger = setup_logger(__name__)
 transcription_logger = setup_transcription_logger()
 
+# Shown in the web UI when a window has no usable audio or no speech detected (API SSE).
+NO_AUDIO_CHUNK_MESSAGE = "[no audio this chunk]"
+
+
 class SlidingWindowProcessor:
     def __init__(
         self,
@@ -37,7 +41,8 @@ class SlidingWindowProcessor:
             segment_interval_seconds: Seconds between each new transcription being triggered.
             on_transcription: Optional callback invoked with each non-duplicate
                 transcription text after the minimum-length filter, before
-                question extraction.
+                question extraction. Also invoked with ``NO_AUDIO_CHUNK_MESSAGE``
+                when a window has no audio buffer or no usable speech.
             enable_question_extraction: When False the LLM extraction step and
                 Excel persistence are skipped entirely; only transcription and
                 the ``on_transcription`` callback run.
@@ -95,15 +100,19 @@ class SlidingWindowProcessor:
         
         if audio_buffer is None or len(audio_buffer) == 0:
             logger.warning("No audio data available")
+            if self.on_transcription is not None:
+                self.on_transcription(NO_AUDIO_CHUNK_MESSAGE)
             return
-        
+
         # Transcribe
         start_time = time.time()
         transcription = self.transcriber.transcribe_audio_buffer(audio_buffer)
         transcribe_time = time.time() - start_time
-        
+
         if not transcription or len(transcription.strip()) < 20:
             # Too short, probably just music or silence
+            if self.on_transcription is not None:
+                self.on_transcription(NO_AUDIO_CHUNK_MESSAGE)
             return
         
         logger.info(f"Transcribed ({transcribe_time:.1f}s): {transcription[:80]}...")
