@@ -28,9 +28,12 @@ function parseErrorDetail(bodyText) {
 
 // ── DOM references ───────────────────────────────────────────────────────────
 
-const statusEl     = document.getElementById("status");
-const transcriptEl = document.getElementById("transcript");
-const urlInput     = document.getElementById("twitchUrl");
+const statusEl      = document.getElementById("status");
+const transcriptEl  = document.getElementById("transcript");
+const urlInput      = document.getElementById("twitchUrl");
+const progressWrap  = document.getElementById("progress-wrap");
+const progressBar   = document.getElementById("progress-bar");
+const progressLabel = document.getElementById("progress-countdown");
 
 // ── Status bar ───────────────────────────────────────────────────────────────
 
@@ -50,6 +53,49 @@ function appendTranscript(text) {
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
+// ── Progress bar ─────────────────────────────────────────────────────────────
+
+const DEFAULT_OVERLAP_SECONDS = 15;
+let overlapDuration = DEFAULT_OVERLAP_SECONDS;
+let countdownTimer  = null;
+let secondsLeft     = 0;
+
+async function fetchSessionConfig() {
+  try {
+    const res = await fetch(apiUrl("/api/config"));
+    if (res.ok) {
+      const cfg = await res.json();
+      overlapDuration = cfg.overlap_duration ?? DEFAULT_OVERLAP_SECONDS;
+    }
+  } catch (_) {
+    // Fall back to default — progress bar still works
+  }
+}
+
+function startCountdown() {
+  stopCountdown();
+  secondsLeft = overlapDuration;
+  progressWrap.hidden = false;
+  tickCountdown();
+
+  countdownTimer = setInterval(() => {
+    secondsLeft = Math.max(0, secondsLeft - 1);
+    tickCountdown();
+  }, 1000);
+}
+
+function tickCountdown() {
+  const pct = (secondsLeft / overlapDuration) * 100;
+  progressBar.style.width = pct + "%";
+  progressLabel.textContent = secondsLeft + "s";
+}
+
+function stopCountdown() {
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+  progressWrap.hidden = true;
+}
+
 // ── EventSource (SSE stream) ─────────────────────────────────────────────────
 
 let activeStream = null;
@@ -59,16 +105,22 @@ function closeStream() {
     activeStream.close();
     activeStream = null;
   }
+  stopCountdown();
 }
 
 function openStream() {
   closeStream();
+  startCountdown();
+
   activeStream = new EventSource(apiUrl("/api/transcription/stream"));
 
   activeStream.onmessage = function (ev) {
     try {
       const data = JSON.parse(ev.data);
-      if (data && typeof data.text === "string") appendTranscript(data.text);
+      if (data && typeof data.text === "string") {
+        appendTranscript(data.text);
+        startCountdown(); // reset the bar after each new segment
+      }
     } catch (_) {
       setStatus("Bad event data from server.", "error");
     }
@@ -131,5 +183,6 @@ async function handleStop() {
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
+fetchSessionConfig();
 document.getElementById("btnStart").addEventListener("click", handleStart);
 document.getElementById("btnStop").addEventListener("click", handleStop);

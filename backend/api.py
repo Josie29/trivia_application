@@ -18,6 +18,7 @@ from config import Config
 from core import LiveTriviaAssistant
 from schemas import (
     HealthResponse,
+    SessionConfigResponse,
     StartSessionRequest,
     StartSessionResponse,
     StopSessionResponse,
@@ -215,6 +216,18 @@ def create_app() -> FastAPI:
             HealthResponse: Fixed OK payload.
         """
         return HealthResponse()
+
+    @app.get("/api/config", response_model=SessionConfigResponse)
+    def api_config() -> SessionConfigResponse:
+        """Return processing timing values so the frontend can drive the progress bar.
+
+        Returns:
+            SessionConfigResponse: Window and overlap durations in seconds.
+        """
+        return SessionConfigResponse(
+            window_duration=Config.WINDOW_DURATION,
+            overlap_duration=Config.OVERLAP_DURATION,
+        )
 
     @app.post("/api/start", response_model=StartSessionResponse)
     async def api_start(body: StartSessionRequest) -> StartSessionResponse:

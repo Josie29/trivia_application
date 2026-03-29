@@ -60,3 +60,10 @@ class TranscriptionEvent(BaseModel):
     """One SSE ``data:`` JSON payload for a transcription chunk."""
 
     text: str = Field(description="Transcribed text for this window")
+
+
+class SessionConfigResponse(BaseModel):
+    """Processing timing values exposed to the frontend for the progress bar."""
+
+    window_duration: int = Field(description="Seconds of audio captured per window")
+    overlap_duration: int = Field(description="Seconds between successive window starts")
