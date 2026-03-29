@@ -42,8 +42,9 @@ const questionHourEl     = document.getElementById("questionHour");
 const questionNumberEl   = document.getElementById("questionNumber");
 const questionTextEl     = document.getElementById("questionText");
 const btnUseSelection    = document.getElementById("btnUseSelection");
-const btnCopyQuestion    = document.getElementById("btnCopyQuestion");
+const btnSaveToLog       = document.getElementById("btnSaveToLog");
 const captureFeedbackEl  = document.getElementById("captureFeedback");
+const questionLogEl      = document.getElementById("questionLog");
 
 // ── Status bar ───────────────────────────────────────────────────────────────
 
@@ -81,8 +82,26 @@ function clearTranscript() {
 }
 
 function appendTranscript(text) {
-  transcriptEl.appendChild(document.createTextNode(text + "\n\n"));
+  const chunk = String(text ?? "").trim();
+  if (!chunk) return;
+  if (transcriptEl.textContent.length > 0) {
+    transcriptEl.appendChild(document.createTextNode(" "));
+  }
+  transcriptEl.appendChild(document.createTextNode(chunk));
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+/**
+ * Collapses line breaks and extra spaces from transcript clips into one flowing line of words
+ * (browser still wraps in the textarea).
+ *
+ * @param {string} raw - Selected or pasted transcript text.
+ * @returns {string}
+ */
+function normalizeTranscriptSnippetForQuestion(raw) {
+  return String(raw ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -130,45 +149,195 @@ function handleUseSelectionAsQuestion() {
     );
     return;
   }
-  questionTextEl.value = selected;
+  questionTextEl.value = normalizeTranscriptSnippetForQuestion(selected);
   setCaptureFeedback("Question text updated from your selection.", "success");
 }
 
+// ── Shared question log (server-backed, all viewers) ─────────────────────────
+
+/** @type {ReturnType<typeof setInterval> | null} */
+let questionLogPollTimer = null;
+
 /**
- * Builds a single string with optional hour / question number header and the question body for clipboard or sharing.
+ * Parses hour and question number from the form; returns nulls if invalid or missing.
  *
- * @returns {string}
+ * @returns {{ hour: number, questionNumber: number } | null}
  */
-function buildFormattedQuestionBlock() {
-  const hour = String(questionHourEl.value ?? "").trim();
-  const num = String(questionNumberEl.value ?? "").trim();
-  const body = String(questionTextEl.value ?? "").trim();
-  const headerParts = [];
-  if (hour) headerParts.push("Hour: " + hour);
-  if (num) headerParts.push("Q: " + num);
-  const header = headerParts.length ? headerParts.join(" | ") : "";
-  if (header && body) return header + "\n\n" + body;
-  if (header) return header;
-  return body;
+function parseHourAndQuestionNumber() {
+  const hourRaw = String(questionHourEl.value ?? "").trim();
+  const qRaw = String(questionNumberEl.value ?? "").trim();
+  if (!hourRaw || !qRaw) return null;
+  const hour = parseInt(hourRaw, 10);
+  const questionNumber = parseInt(qRaw, 10);
+  if (!Number.isFinite(hour) || hour < 1) return null;
+  if (!Number.isFinite(questionNumber) || questionNumber < 1) return null;
+  return { hour, questionNumber };
 }
 
 /**
- * Copies the formatted question (hour, Q#, and text) to the clipboard. Uses plain text only.
+ * Renders the shared log: hours as sections, questions ordered by Q# within each hour.
+ *
+ * @param {Array<{ hour: number, question_number: number, text: string, updated_at: string }>} questions
  */
-async function handleCopyFormattedQuestion() {
-  const block = buildFormattedQuestionBlock();
-  if (!block) {
-    setCaptureFeedback("Nothing to copy — add question text or hour / number.", "error");
+function renderQuestionLog(questions) {
+  questionLogEl.innerHTML = "";
+  if (!questions || questions.length === 0) {
+    const p = document.createElement("p");
+    p.className = "question-log-empty";
+    p.textContent =
+      "No questions saved yet. Set hour and Q#, add text, then click “Save to shared log”.";
+    questionLogEl.appendChild(p);
     return;
   }
-  try {
-    await navigator.clipboard.writeText(block);
-    setCaptureFeedback("Copied to clipboard.", "success");
-  } catch {
+
+  const byHour = new Map();
+  for (const q of questions) {
+    const h = q.hour;
+    if (!byHour.has(h)) byHour.set(h, []);
+    byHour.get(h).push(q);
+  }
+
+  const hoursSorted = [...byHour.keys()].sort((a, b) => a - b);
+  for (const h of hoursSorted) {
+    const section = document.createElement("section");
+    section.className = "question-log-hour";
+
+    const title = document.createElement("h3");
+    title.className = "question-log-hour-title";
+    title.textContent = "Hour " + h;
+    section.appendChild(title);
+
+    const list = byHour.get(h).slice();
+    list.sort((a, b) => a.question_number - b.question_number);
+    for (const item of list) {
+      const row = document.createElement("div");
+      row.className = "question-log-item";
+
+      const meta = document.createElement("div");
+      meta.className = "question-log-meta";
+      meta.textContent = "Q" + item.question_number;
+
+      const body = document.createElement("div");
+      body.className = "question-log-body";
+      body.textContent = item.text;
+
+      row.appendChild(meta);
+      row.appendChild(body);
+
+      if (item.updated_at) {
+        const ts = document.createElement("div");
+        ts.className = "question-log-updated";
+        ts.textContent = "Updated " + item.updated_at;
+        row.appendChild(ts);
+      }
+
+      section.appendChild(row);
+    }
+
+    questionLogEl.appendChild(section);
+  }
+}
+
+/**
+ * Fetches the current question list from the API and re-renders the panel.
+ */
+async function refreshQuestionLog() {
+  const res = await fetch(apiUrl("/api/questions"));
+  if (!res.ok) return;
+  const data = await res.json();
+  renderQuestionLog(data.questions);
+}
+
+/**
+ * Starts polling the question log so all open tabs stay in sync.
+ */
+function startQuestionLogPolling() {
+  stopQuestionLogPolling();
+  questionLogPollTimer = setInterval(function () {
+    refreshQuestionLog().catch(function () {
+      /* ignore transient errors */
+    });
+  }, 2500);
+}
+
+/**
+ * Stops background polling (e.g. when leaving the page).
+ */
+function stopQuestionLogPolling() {
+  if (questionLogPollTimer !== null) {
+    clearInterval(questionLogPollTimer);
+    questionLogPollTimer = null;
+  }
+}
+
+/**
+ * Saves the current captured question to the server log. Prompts before overwriting the same hour/Q#.
+ */
+async function handleSaveToSharedLog() {
+  const parsed = parseHourAndQuestionNumber();
+  if (!parsed) {
     setCaptureFeedback(
-      "Could not copy (clipboard permission or browser support).",
+      "Enter a valid Hour and Question # (both at least 1) before saving.",
       "error"
     );
+    return;
+  }
+  const text = String(questionTextEl.value ?? "").trim();
+  if (!text) {
+    setCaptureFeedback("Add question text (or use selection from the transcript) before saving.", "error");
+    return;
+  }
+
+  let existing = [];
+  try {
+    const res = await fetch(apiUrl("/api/questions"));
+    if (res.ok) {
+      const data = await res.json();
+      existing = data.questions || [];
+    }
+  } catch {
+    setCaptureFeedback("Could not check existing questions (network).", "error");
+    return;
+  }
+
+  const clash = existing.some(function (e) {
+    return e.hour === parsed.hour && e.question_number === parsed.questionNumber;
+  });
+  if (clash) {
+    const ok = window.confirm(
+      "A question is already saved for Hour " +
+        parsed.hour +
+        ", Q" +
+        parsed.questionNumber +
+        ". Replace it with the text in the box?"
+    );
+    if (!ok) return;
+  }
+
+  try {
+    const res = await fetch(apiUrl("/api/questions"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hour: parsed.hour,
+        question_number: parsed.questionNumber,
+        text: text,
+      }),
+    });
+    if (!res.ok) {
+      const detail = parseErrorDetail(await res.text());
+      setCaptureFeedback("Save failed (" + res.status + "): " + detail, "error");
+      return;
+    }
+    const out = await res.json();
+    if (out.overwritten) {
+      setCaptureFeedback("Saved (replaced previous text for this hour and Q#).", "success");
+    } else {
+      setCaptureFeedback("Saved to shared question log.", "success");
+    }
+    await refreshQuestionLog();
+  } catch (err) {
+    setCaptureFeedback("Network error: " + err.message, "error");
   }
 }
 
@@ -326,7 +495,14 @@ async function handleStop() {
 // ── Initialise ───────────────────────────────────────────────────────────────
 
 fetchSessionConfig();
+refreshQuestionLog().catch(function () {});
+startQuestionLogPolling();
 btnStart.addEventListener("click", handleStart);
 btnStop.addEventListener("click", handleStop);
 btnUseSelection.addEventListener("click", handleUseSelectionAsQuestion);
-btnCopyQuestion.addEventListener("click", handleCopyFormattedQuestion);
+btnSaveToLog.addEventListener("click", function () {
+  handleSaveToSharedLog();
+});
+window.addEventListener("beforeunload", function () {
+  stopQuestionLogPolling();
+});

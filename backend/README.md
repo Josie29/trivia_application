@@ -109,8 +109,10 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | `POST` | `/api/start` | Body: `{"twitch_url": "https://www.twitch.tv/..."}` |
 | `POST` | `/api/stop` | Stop session |
 | `GET` | `/api/transcription/stream` | SSE: JSON lines `{"text": "..."}` |
+| `GET` | `/api/questions` | Shared question log: sorted by hour, then question number |
+| `POST` | `/api/questions` | Body: `{"hour": 1, "question_number": 2, "text": "..."}` — upsert; response includes `overwritten` |
 
-**Deployment:** One in-memory session and background threads — use **one Uvicorn worker** (e.g. `--workers 1`) until you add shared state. Twitch access may fail from some cloud datacenters; home/VPS often works better.
+**Deployment:** One in-memory session and background threads — use **one Uvicorn worker** (e.g. `--workers 1`) until you add shared state. The **shared question log** is also in-memory (resets on process restart); Twitch access may fail from some cloud datacenters; home/VPS often works better.
 
 **Production:** deploy the full app on **Render** with the repo-root [`../Dockerfile`](../Dockerfile) (bundles `../frontend/`). See [`../DEPLOY.md`](../DEPLOY.md).
 
@@ -126,6 +128,7 @@ backend/
   run.py            # Dev server: validate_for_api + uvicorn
   api.py            # FastAPI app
   schemas.py        # Request/response + SSE payload models
+  question_log_store.py  # Shared in-memory question log (hour + Q#)
   config.py
   requirements.txt
   core/             # Capture, Whisper, sliding window, extraction, Excel

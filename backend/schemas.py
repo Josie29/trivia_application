@@ -67,3 +67,52 @@ class SessionConfigResponse(BaseModel):
 
     window_duration: int = Field(description="Seconds of audio captured per window")
     overlap_duration: int = Field(description="Seconds between successive window starts")
+
+
+class LoggedQuestion(BaseModel):
+    """One row in the shared question log."""
+
+    hour: int = Field(ge=1, description="Trivia hour")
+    question_number: int = Field(ge=1, description="Question number within that hour")
+    text: str = Field(min_length=1, description="Question wording")
+    updated_at: str = Field(description="When this row was last saved (ISO-8601 UTC)")
+
+
+class QuestionLogListResponse(BaseModel):
+    """Full list for GET /api/questions (sorted by hour, then question number)."""
+
+    questions: list[LoggedQuestion]
+
+
+class UpsertQuestionRequest(BaseModel):
+    """Body for POST /api/questions."""
+
+    hour: int = Field(ge=1)
+    question_number: int = Field(ge=1)
+    text: str = Field(min_length=1)
+
+    @field_validator("text")
+    @classmethod
+    def strip_non_empty_text(cls, value: str) -> str:
+        """Reject empty or whitespace-only question text.
+
+        Args:
+            value: Raw ``text`` from the client.
+
+        Returns:
+            str: Stripped question text.
+
+        Raises:
+            ValueError: If nothing remains after stripping.
+        """
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("text cannot be empty or whitespace only")
+        return stripped
+
+
+class UpsertQuestionResponse(BaseModel):
+    """Result of saving one question."""
+
+    overwritten: bool = Field(description="True if this hour/Q# already had text")
+    question: LoggedQuestion
