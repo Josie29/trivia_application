@@ -222,11 +222,11 @@ def create_app() -> FastAPI:
         """Return processing timing values so the frontend can drive the progress bar.
 
         Returns:
-            SessionConfigResponse: Window and overlap durations in seconds.
+            SessionConfigResponse: Audio window size and segment interval in seconds.
         """
         return SessionConfigResponse(
-            window_duration=Config.WINDOW_DURATION,
-            overlap_duration=Config.OVERLAP_DURATION,
+            audio_window_seconds=Config.AUDIO_WINDOW_SECONDS,
+            segment_interval_seconds=Config.SEGMENT_INTERVAL_SECONDS,
         )
 
     @app.post("/api/start", response_model=StartSessionResponse)

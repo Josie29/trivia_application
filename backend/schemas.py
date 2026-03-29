@@ -65,5 +65,5 @@ class TranscriptionEvent(BaseModel):
 class SessionConfigResponse(BaseModel):
     """Processing timing values exposed to the frontend for the progress bar."""
 
-    window_duration: int = Field(description="Seconds of audio captured per window")
-    overlap_duration: int = Field(description="Seconds between successive window starts")
+    audio_window_seconds: int = Field(description="Seconds of audio captured per Whisper window")
+    segment_interval_seconds: int = Field(description="Seconds between each new transcription being triggered")

@@ -80,27 +80,30 @@ function appendTranscript(text) {
 
 // ── Progress bar ─────────────────────────────────────────────────────────────
 
-const DEFAULT_OVERLAP_SECONDS = 15;
-let overlapDuration = DEFAULT_OVERLAP_SECONDS;
-let countdownTimer  = null;
-let secondsLeft     = 0;
+const DEFAULT_AUDIO_WINDOW_SECONDS    = 30;
+const DEFAULT_SEGMENT_INTERVAL_SECONDS = 15;
+let audioWindowSeconds    = DEFAULT_AUDIO_WINDOW_SECONDS;
+let segmentIntervalSeconds = DEFAULT_SEGMENT_INTERVAL_SECONDS;
+let countdownTimer = null;
+let secondsLeft    = 0;
 
 async function fetchSessionConfig() {
   try {
     const res = await fetch(apiUrl("/api/config"));
     if (res.ok) {
       const cfg = await res.json();
-      overlapDuration = cfg.overlap_duration ?? DEFAULT_OVERLAP_SECONDS;
+      audioWindowSeconds    = cfg.audio_window_seconds    ?? DEFAULT_AUDIO_WINDOW_SECONDS;
+      segmentIntervalSeconds = cfg.segment_interval_seconds ?? DEFAULT_SEGMENT_INTERVAL_SECONDS;
     }
   } catch (_) {
-    // Fall back to default — progress bar still works
+    // Fall back to defaults — progress bar still works
   }
 }
 
 function startCountdown() {
   stopCountdown();
   progressBar.classList.remove("is-indeterminate");
-  secondsLeft = overlapDuration;
+  secondsLeft = audioWindowSeconds;
   progressWrap.hidden = false;
   tickCountdown();
 
@@ -111,7 +114,7 @@ function startCountdown() {
 }
 
 function tickCountdown() {
-  const pct = (secondsLeft / overlapDuration) * 100;
+  const pct = (secondsLeft / audioWindowSeconds) * 100;
   progressBar.style.width = pct + "%";
   progressLabel.textContent = secondsLeft + "s";
 }
