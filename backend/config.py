@@ -33,6 +33,14 @@ class Config:
     WINDOW_DURATION = int(os.getenv("WINDOW_DURATION", 30))  # seconds
     OVERLAP_DURATION = int(os.getenv("OVERLAP_DURATION", 15))  # seconds
     
+    # Feature Flags
+    # Set to False (or ENABLE_QUESTION_EXTRACTION=false in .env) to skip the
+    # second LLM call that extracts structured question fields from transcriptions.
+    # Useful for testing the audio capture → transcription → UI display pipeline.
+    ENABLE_QUESTION_EXTRACTION: bool = (
+        os.getenv("ENABLE_QUESTION_EXTRACTION", "false").lower() not in ("0", "false", "no")
+    )
+
     # Deduplication Thresholds
     TRANSCRIPTION_SIMILARITY_THRESHOLD = 0.80  # 80% = duplicate transcription
     QUESTION_SIMILARITY_THRESHOLD = 0.85       # 85% = duplicate question
@@ -76,17 +84,21 @@ class Config:
     def validate_for_api(cls):
         """Validate configuration for the FastAPI server.
 
-        Requires ``OPENAI_API_KEY`` only; Twitch channel URL is supplied per request.
+        Requires ``OPENAI_API_KEY`` only when ``ENABLE_QUESTION_EXTRACTION`` is
+        ``True``; Twitch channel URL is supplied per request.
         Ensures data and log directories exist.
 
         Returns:
             bool: ``True`` if validation succeeded.
 
         Raises:
-            ValueError: If ``OPENAI_API_KEY`` is missing from the environment.
+            ValueError: If ``OPENAI_API_KEY`` is missing and extraction is enabled.
         """
-        if not cls.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY not set in .env file")
+        if cls.ENABLE_QUESTION_EXTRACTION and not cls.OPENAI_API_KEY:
+            raise ValueError(
+                "OPENAI_API_KEY not set in .env file "
+                "(required when ENABLE_QUESTION_EXTRACTION=true)"
+            )
 
         cls._ensure_data_dirs()
 
