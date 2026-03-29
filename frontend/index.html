@@ -3,18 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trivia — Live Transcription</title>
+  <title>Trivia AI — Live Stream Assistant</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
   <header>
-    <h1><span class="logo-dot"></span>Live Transcription</h1>
-    <p>
-      For local dev, leave <code>config.js</code> base URL empty and run
-      <code>python run.py</code> from <code>backend/</code>. Requires an active Twitch stream.
-    </p>
+    <h1><span class="logo-dot"></span>Trivia AI</h1>
+    <p>Connect to any live Twitch stream and watch AI transcribe and extract trivia questions in real time.</p>
   </header>
+
+  <div class="feature-pills">
+    <span class="pill">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="white"/></svg>
+      Live audio capture
+    </span>
+    <span class="pill">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M8 12h8M12 8v8"/></svg>
+      Real-time transcription
+    </span>
+    <span class="pill">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5" fill="currentColor"/></svg>
+      AI question extraction
+    </span>
+  </div>
 
   <div class="card">
     <label for="twitchUrl">Twitch channel URL</label>
@@ -23,14 +35,13 @@
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
       </svg>
-      <input id="twitchUrl" type="url" value="https://m.twitch.tv/neglagonave"
-        placeholder="https://www.twitch.tv/channel" autocomplete="off" />
+      <input id="twitchUrl" type="url" placeholder="https://www.twitch.tv/channel" autocomplete="off" />
     </div>
 
     <div class="actions">
       <button type="button" id="btnStart">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Start
+        Start Session
       </button>
       <button type="button" id="btnStop">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
@@ -41,9 +52,9 @@
     <div id="status" aria-live="polite"></div>
 
     <div class="transcript-header">
-      <span class="transcript-label">Transcript</span>
+      <span class="transcript-label">Live Transcript</span>
     </div>
-    <div id="transcript" aria-label="Transcription output"></div>
+    <div id="transcript" aria-label="Live transcription output"></div>
   </div>
 
   <script src="config.js"></script>
