@@ -15,6 +15,12 @@ Capture live Twitch trivia audio, transcribe with Faster-Whisper, extract questi
 
 ---
 
+## Live Demo
+
+**[https://trivia-application-dhzw.onrender.com](https://trivia-application-dhzw.onrender.com)**
+
+---
+
 ## Deploy (Render — UI + API together)
 
 **[Render](https://render.com)** Web Service using the repo-root [`Dockerfile`](Dockerfile) ships **backend and `frontend/`** in one container (same URL, FFmpeg included). Keep `frontend/config.js` as `__TRIVIA_API_BASE__ = ""`. Step-by-step: [**DEPLOY.md**](DEPLOY.md).
