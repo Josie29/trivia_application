@@ -75,6 +75,27 @@ header code {
   font-size: 0.85em;
 }
 
+/* ── Feature pills ─────────────────────────────────────── */
+.feature-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border-radius: 999px;
+}
+
 /* ── Card ──────────────────────────────────────────────── */
 .card {
   width: 100%;
@@ -227,7 +248,7 @@ button:active { transform: scale(0.97); }
 }
 
 #transcript:empty::before {
-  content: "Transcript will appear here once the stream starts…";
+  content: "Transcription will appear here once the session starts…";
   color: var(--color-text-muted);
   font-style: italic;
 }
