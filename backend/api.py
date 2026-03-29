@@ -18,6 +18,7 @@ from config import Config
 from core import LiveTriviaAssistant
 from schemas import (
     HealthResponse,
+    SessionConfigResponse,
     StartSessionRequest,
     StartSessionResponse,
     StopSessionResponse,
@@ -215,6 +216,18 @@ def create_app() -> FastAPI:
             HealthResponse: Fixed OK payload.
         """
         return HealthResponse()
+
+    @app.get("/api/config", response_model=SessionConfigResponse)
+    def api_config() -> SessionConfigResponse:
+        """Return processing timing values so the frontend can drive the progress bar.
+
+        Returns:
+            SessionConfigResponse: Audio window size and segment interval in seconds.
+        """
+        return SessionConfigResponse(
+            audio_window_seconds=Config.AUDIO_WINDOW_SECONDS,
+            segment_interval_seconds=Config.SEGMENT_INTERVAL_SECONDS,
+        )
 
     @app.post("/api/start", response_model=StartSessionResponse)
     async def api_start(body: StartSessionRequest) -> StartSessionResponse:

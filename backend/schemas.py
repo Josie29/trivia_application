@@ -60,3 +60,10 @@ class TranscriptionEvent(BaseModel):
     """One SSE ``data:`` JSON payload for a transcription chunk."""
 
     text: str = Field(description="Transcribed text for this window")
+
+
+class SessionConfigResponse(BaseModel):
+    """Processing timing values exposed to the frontend for the progress bar."""
+
+    audio_window_seconds: int = Field(description="Seconds of audio captured per Whisper window")
+    segment_interval_seconds: int = Field(description="Seconds between each new transcription being triggered")
