@@ -30,8 +30,11 @@ class Config:
     WHISPER_COMPUTE_TYPE = "int8" if WHISPER_DEVICE == "cpu" else "float16"
     
     # Processing Settings
-    WINDOW_DURATION = int(os.getenv("WINDOW_DURATION", 30))  # seconds
-    OVERLAP_DURATION = int(os.getenv("OVERLAP_DURATION", 15))  # seconds
+    # AUDIO_WINDOW_SECONDS must always be greater than SEGMENT_INTERVAL_SECONDS.
+    # The difference (AUDIO_WINDOW_SECONDS - SEGMENT_INTERVAL_SECONDS) is the
+    # audio overlap shared between consecutive windows.
+    AUDIO_WINDOW_SECONDS = int(os.getenv("AUDIO_WINDOW_SECONDS", 30))          # larger  — seconds of audio captured per Whisper window
+    SEGMENT_INTERVAL_SECONDS = int(os.getenv("SEGMENT_INTERVAL_SECONDS", 15))  # smaller — seconds between each new transcription
     
     # Feature Flags
     # Set to False (or ENABLE_QUESTION_EXTRACTION=false in .env) to skip the

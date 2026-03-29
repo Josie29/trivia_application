@@ -23,8 +23,8 @@ class SlidingWindowProcessor:
         transcriber,
         extractor,
         excel_manager,
-        window_duration=30,
-        overlap_duration=15,
+        audio_window_seconds=30,
+        segment_interval_seconds=15,
         on_transcription: Optional[Callable[[str], None]] = None,
         enable_question_extraction: bool = True,
     ):
@@ -37,8 +37,8 @@ class SlidingWindowProcessor:
                        Ignored when ``enable_question_extraction`` is False.
             excel_manager: Persists extracted questions.
                            Ignored when ``enable_question_extraction`` is False.
-            window_duration: Seconds of audio per processing window.
-            overlap_duration: Seconds between window starts (slide step).
+            audio_window_seconds: Seconds of audio captured per Whisper window.
+            segment_interval_seconds: Seconds between each new transcription being triggered.
             on_transcription: Optional callback invoked with each non-duplicate
                 transcription text after the minimum-length filter, before
                 question extraction. Also invoked with ``NO_AUDIO_CHUNK_MESSAGE``
@@ -53,8 +53,8 @@ class SlidingWindowProcessor:
         self.excel_manager = excel_manager
         self.enable_question_extraction = enable_question_extraction
 
-        self.window_duration = window_duration
-        self.overlap_duration = overlap_duration
+        self.audio_window_seconds = audio_window_seconds
+        self.segment_interval_seconds = segment_interval_seconds
         self.on_transcription = on_transcription
         
         self.is_processing = False
@@ -81,8 +81,8 @@ class SlidingWindowProcessor:
         while self.is_processing:
             current_time = time.time()
             
-            # Process every overlap_duration seconds
-            if current_time - last_process_time >= self.overlap_duration:
+            # Trigger a new transcription every segment_interval_seconds
+            if current_time - last_process_time >= self.segment_interval_seconds:
                 try:
                     self._process_window()
                     last_process_time = current_time
@@ -93,10 +93,10 @@ class SlidingWindowProcessor:
     
     def _process_window(self):
         """Process one window of audio"""
-        logger.info(f"Processing {self.window_duration}s audio window...")
+        logger.info(f"Processing {self.audio_window_seconds}s audio window...")
         
         # Get audio buffer from stream
-        audio_buffer = self.stream_capture.get_audio_buffer(self.window_duration)
+        audio_buffer = self.stream_capture.get_audio_buffer(self.audio_window_seconds)
         
         if audio_buffer is None or len(audio_buffer) == 0:
             logger.warning("No audio data available")
