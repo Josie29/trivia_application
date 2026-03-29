@@ -450,6 +450,9 @@ async function handleStart() {
   setStartBtn("connecting");
   setStatus("Connecting to stream…");
 
+  // Always fetch config fresh so any .env changes take effect without a page reload.
+  await fetchSessionConfig();
+
   try {
     const res = await fetch(apiUrl("/api/start"), {
       method: "POST",
