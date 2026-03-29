@@ -64,7 +64,33 @@
     <div class="transcript-header">
       <span class="transcript-label">Live Transcript</span>
     </div>
-    <div id="transcript" aria-label="Live transcription output"></div>
+    <div id="transcript" aria-label="Live transcription output" tabindex="0"></div>
+
+    <section class="question-capture" aria-labelledby="question-capture-heading">
+      <div class="transcript-header">
+        <span class="transcript-label" id="question-capture-heading">Captured question</span>
+      </div>
+      <p class="capture-hint">
+        Highlight text in the live transcript, then use the button below to move it here for editing and copy-paste.
+      </p>
+      <div class="question-meta-row">
+        <div class="field-inline">
+          <label for="questionHour">Hour</label>
+          <input id="questionHour" type="number" inputmode="numeric" min="1" placeholder="e.g. 1" autocomplete="off" />
+        </div>
+        <div class="field-inline">
+          <label for="questionNumber">Question #</label>
+          <input id="questionNumber" type="number" inputmode="numeric" min="1" placeholder="e.g. 5" autocomplete="off" />
+        </div>
+      </div>
+      <label for="questionText">Question text</label>
+      <textarea id="questionText" rows="5" placeholder="Selected text appears here. You can edit it before copying."></textarea>
+      <p id="captureFeedback" class="capture-feedback" role="status" aria-live="polite" hidden></p>
+      <div class="question-actions">
+        <button type="button" id="btnUseSelection">Use selection as question</button>
+        <button type="button" id="btnCopyQuestion" class="btn-secondary">Copy formatted</button>
+      </div>
+    </section>
   </div>
 
   <script src="config.js"></script>

@@ -38,6 +38,13 @@ const btnStart      = document.getElementById("btnStart");
 const btnStartLabel = document.getElementById("btnStartLabel");
 const btnStop       = document.getElementById("btnStop");
 
+const questionHourEl     = document.getElementById("questionHour");
+const questionNumberEl   = document.getElementById("questionNumber");
+const questionTextEl     = document.getElementById("questionText");
+const btnUseSelection    = document.getElementById("btnUseSelection");
+const btnCopyQuestion    = document.getElementById("btnCopyQuestion");
+const captureFeedbackEl  = document.getElementById("captureFeedback");
+
 // ── Status bar ───────────────────────────────────────────────────────────────
 
 function setStatus(msg, type) {
@@ -76,6 +83,93 @@ function clearTranscript() {
 function appendTranscript(text) {
   transcriptEl.appendChild(document.createTextNode(text + "\n\n"));
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+/**
+ * Returns trimmed text currently selected inside the live transcript, or empty string if none / selection is outside the box.
+ *
+ * @returns {string}
+ */
+function getSelectedTextInTranscript() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return "";
+  const range = sel.getRangeAt(0);
+  if (!transcriptEl.contains(range.commonAncestorContainer)) return "";
+  const text = sel.toString();
+  return typeof text === "string" ? text.trim() : "";
+}
+
+/**
+ * Shows short feedback under the captured-question controls (or hides it when msg is empty).
+ *
+ * @param {string} msg - Message to show, or "" to clear.
+ * @param {"error"|"success"|""} [type] - Visual style; ignored when msg is empty.
+ */
+function setCaptureFeedback(msg, type) {
+  if (!msg) {
+    captureFeedbackEl.textContent = "";
+    captureFeedbackEl.className = "capture-feedback";
+    captureFeedbackEl.hidden = true;
+    return;
+  }
+  captureFeedbackEl.hidden = false;
+  captureFeedbackEl.textContent = msg;
+  captureFeedbackEl.className =
+    "capture-feedback " + (type === "success" ? "is-success" : "is-error");
+}
+
+/**
+ * Copies highlighted transcript text into the question textarea. Shows feedback if nothing is selected.
+ */
+function handleUseSelectionAsQuestion() {
+  const selected = getSelectedTextInTranscript();
+  if (!selected) {
+    setCaptureFeedback(
+      "Select text in the Live Transcript box first, then click again.",
+      "error"
+    );
+    return;
+  }
+  questionTextEl.value = selected;
+  setCaptureFeedback("Question text updated from your selection.", "success");
+}
+
+/**
+ * Builds a single string with optional hour / question number header and the question body for clipboard or sharing.
+ *
+ * @returns {string}
+ */
+function buildFormattedQuestionBlock() {
+  const hour = String(questionHourEl.value ?? "").trim();
+  const num = String(questionNumberEl.value ?? "").trim();
+  const body = String(questionTextEl.value ?? "").trim();
+  const headerParts = [];
+  if (hour) headerParts.push("Hour: " + hour);
+  if (num) headerParts.push("Q: " + num);
+  const header = headerParts.length ? headerParts.join(" | ") : "";
+  if (header && body) return header + "\n\n" + body;
+  if (header) return header;
+  return body;
+}
+
+/**
+ * Copies the formatted question (hour, Q#, and text) to the clipboard. Uses plain text only.
+ */
+async function handleCopyFormattedQuestion() {
+  const block = buildFormattedQuestionBlock();
+  if (!block) {
+    setCaptureFeedback("Nothing to copy — add question text or hour / number.", "error");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(block);
+    setCaptureFeedback("Copied to clipboard.", "success");
+  } catch {
+    setCaptureFeedback(
+      "Could not copy (clipboard permission or browser support).",
+      "error"
+    );
+  }
 }
 
 // ── Progress bar ─────────────────────────────────────────────────────────────
@@ -234,3 +328,5 @@ async function handleStop() {
 fetchSessionConfig();
 btnStart.addEventListener("click", handleStart);
 btnStop.addEventListener("click", handleStop);
+btnUseSelection.addEventListener("click", handleUseSelectionAsQuestion);
+btnCopyQuestion.addEventListener("click", handleCopyFormattedQuestion);

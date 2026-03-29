@@ -142,9 +142,39 @@ input[type="url"] {
   outline: none;
 }
 
-input[type="url"]:focus {
+input[type="url"]:focus,
+input[type="number"]:focus,
+textarea:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+input[type="number"] {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.9rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  resize: vertical;
+  min-height: 6rem;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
 }
 
 /* ── Buttons ───────────────────────────────────────────── */
@@ -313,6 +343,86 @@ button.is-loading::before {
   content: "Transcription will appear here once the session starts…";
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+/* ── Question capture ──────────────────────────────────── */
+.question-capture {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.capture-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+
+.question-meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.field-inline label {
+  margin-bottom: 0.3rem;
+}
+
+.question-capture > label[for="questionText"] {
+  margin-top: 0;
+}
+
+#questionText {
+  margin-bottom: 0.75rem;
+}
+
+.question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+#btnUseSelection {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+#btnUseSelection:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1.5px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+  background: var(--color-surface);
+  border-color: var(--color-text-muted);
+}
+
+@media (max-width: 28rem) {
+  .question-meta-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.capture-feedback {
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin: 0 0 0.65rem;
+  line-height: 1.4;
+}
+
+.capture-feedback.is-error {
+  color: var(--color-error);
+}
+
+.capture-feedback.is-success {
+  color: var(--color-success);
 }
 
 /* ── Animations ────────────────────────────────────────── */

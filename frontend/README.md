@@ -8,7 +8,7 @@ Static and lightweight Python UI assets for the trivia assistant. There is **no 
 
 | File | Role |
 |------|------|
-| [`index.html`](index.html) | **Web UI** — Twitch URL field, Start/Stop, live transcript via Server-Sent Events |
+| [`index.html`](index.html) | **Web UI** — Twitch URL field, Start/Stop, live transcript via Server-Sent Events; highlight transcript text to capture it as a question (hour / Q# fields and copy) |
 | [`config.js`](config.js) | **API base URL** — leave `""` when the UI is served with the API (local `python run.py` or Render Docker); set a full `https://…` base only if you intentionally split UI and API hosts |
 | [`StatusGUI.py`](StatusGUI.py) | **Optional Tkinter window** — shows hour, question count, and a simple LIVE status when wired to a `SlidingWindowProcessor` (not used by `main.py` or the API out of the box) |
 
