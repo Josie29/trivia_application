@@ -142,4 +142,15 @@ backend/
 - **Twitch errors** — Stream must be live; URL must be a normal channel URL. Some networks block or throttle Twitch.
 - **OpenAI errors** — Check `OPENAI_API_KEY` and billing/limits.
 
+### Corporate proxy / Zscaler (SSL errors from Streamlink)
+
+If you see TLS errors such as `CERTIFICATE_VERIFY_FAILED` or `unable to get local issuer certificate` when connecting to Twitch, your HTTPS traffic may be re-signed by a corporate proxy (e.g. Zscaler). Browsers often work because they trust the corporate root via the OS; Python does not unless you supply a combined CA bundle (see `.env.example` and `SSL_CERT_FILE`).
+
+For **local debugging only**, you can disable TLS verification for Streamlink by adding the following to **`backend/.env`** (never enable this in production or committed shared configs):
+
+```env
+# Local debugging only — disables TLS verification for Streamlink (do not use in production)
+TWITCH_STREAMLINK_INSECURE_SSL=1
+```
+
 For product-level architecture and Excel behavior, see the [root README](../README.md).
