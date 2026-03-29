@@ -39,6 +39,41 @@ LIVE TWITCH (audio) → Streamlink → FFmpeg → PCM queue
 
 ---
 
+## Run locally (full stack)
+
+The backend serves the frontend — one command runs the entire app.
+
+**Prerequisites (one-time)**
+
+- Python 3.8+
+- FFmpeg on your PATH (`brew install ffmpeg` on macOS)
+- An OpenAI API key
+
+**Steps**
+
+```bash
+cd trivia_application/backend
+
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create backend/.env
+echo "OPENAI_API_KEY=sk-..." > .env
+
+# Start the full app
+python run.py
+```
+
+Then open **[http://localhost:8000](http://localhost:8000)** — FastAPI serves `frontend/index.html` at that URL, identical to the Render deployment. Paste a live Twitch channel URL into the form and hit Start.
+
+> The first run downloads the Whisper model (~140 MB for `base`) and caches it.
+
+---
+
 ## Getting started
 
 1. **Clone** this repo and `cd` into `trivia_application/`.
