@@ -73,8 +73,11 @@ class Config:
     @classmethod
     def validate(cls):
         """Validate configuration for the CLI assistant (requires Twitch URL in env)."""
-        if not cls.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY not set in .env file")
+        if cls.ENABLE_QUESTION_EXTRACTION and not cls.OPENAI_API_KEY:
+            raise ValueError(
+                "OPENAI_API_KEY not set in .env file "
+                "(required when ENABLE_QUESTION_EXTRACTION=true)"
+            )
 
         if not cls.TWITCH_CHANNEL_URL:
             raise ValueError("TWITCH_CHANNEL_URL not set in .env file")
