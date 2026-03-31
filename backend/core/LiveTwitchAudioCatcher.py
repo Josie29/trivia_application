@@ -148,8 +148,12 @@ class LiveTwitchAudioCapture:
         self.is_streaming = False
         
         if self.ffmpeg_process:
-            self.ffmpeg_process.terminate()
-            self.ffmpeg_process.wait(timeout=5)
+            self.ffmpeg_process.terminate()  # polite shutdown via SIGTERM
+            try:
+                self.ffmpeg_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.ffmpeg_process.kill()   # force kill via SIGKILL if SIGTERM ignored
+                self.ffmpeg_process.wait()   # reap the zombie so the OS frees its resources
             self.ffmpeg_process = None
         
         print("⏹️  Stream capture stopped")
