@@ -47,24 +47,28 @@ Notable packages: `streamlink`, `faster-whisper`, `openai`, `openpyxl`, `fastapi
 
 ### 3. Environment file
 
-Create `.env` in **`backend/`** (recommended, since `load_dotenv()` uses the current working directory when you run from here):
+Copy `.env.example` to `.env` in **`backend/`** and fill in your values. `config.py` resolves the path relative to its own location, so `.env` is always loaded from `backend/` regardless of where you run commands from.
 
 ```bash
-# Required for CLI and API
+# Required
 OPENAI_API_KEY=sk-...
 
-# Required for CLI only (main.py); optional for API if you use the browser URL field
+# Required for CLI (main.py); optional for API server (run.py) — URL supplied per request
 TWITCH_CHANNEL_URL=https://www.twitch.tv/your_channel
 
 # Optional (defaults shown)
-WHISPER_MODEL_SIZE=base
-WHISPER_DEVICE=cpu
-AUDIO_WINDOW_SECONDS=30
-SEGMENT_INTERVAL_SECONDS=15
+WHISPER_MODEL_SIZE=base          # tiny | base | small | medium | large
+WHISPER_DEVICE=cpu               # cpu | cuda
+AUDIO_WINDOW_SECONDS=30          # seconds of audio per Whisper window (must be > interval)
+SEGMENT_INTERVAL_SECONDS=15      # seconds between transcriptions (overlap = window - interval)
+ENABLE_QUESTION_EXTRACTION=false # set true to enable LLM question extraction
 LOG_LEVEL=INFO
 
-# Optional: extra browser origins if UI and API are on different hosts (comma-separated, no spaces)
+# Optional: extra CORS origins beyond localhost (comma-separated, https only, no trailing slash)
 # CORS_ORIGINS=https://your-custom-domain.com
+
+# TLS: provide a PEM CA bundle to override certifi (corporate proxy)
+# SSL_CERT_FILE=/path/to/combined-ca-bundle.pem
 ```
 
 - **`main.py`** calls `Config.validate()` — needs `OPENAI_API_KEY` and `TWITCH_CHANNEL_URL`.

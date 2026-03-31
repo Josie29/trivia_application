@@ -53,6 +53,46 @@ function setStatus(msg, type) {
   statusEl.className = type ?? "";
 }
 
+// ── Session timer ─────────────────────────────────────────────────────────────
+
+let sessionStartTime = null;
+let sessionTimerInterval = null;
+
+function formatDuration(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) {
+    return `${h}h ${m}m ${s}s`;
+  }
+  if (m > 0) {
+    return `${m}m ${s}s`;
+  }
+  return `${s}s`;
+}
+
+function startSessionTimer() {
+  stopSessionTimer();
+  sessionStartTime = Date.now();
+  sessionTimerInterval = setInterval(function () {
+    const elapsed = formatDuration(Date.now() - sessionStartTime);
+    statusEl.innerHTML = `<span class="status-dot"></span>Running — transcription lines appear below. <span class="session-timer">${elapsed}</span>`;
+  }, 1000);
+}
+
+function stopSessionTimer() {
+  if (sessionTimerInterval !== null) {
+    clearInterval(sessionTimerInterval);
+    sessionTimerInterval = null;
+  }
+}
+
+function getSessionDuration() {
+  if (sessionStartTime === null) return null;
+  return Date.now() - sessionStartTime;
+}
+
 // ── Button states ─────────────────────────────────────────────────────────────
 
 function setStartBtn(state) {
@@ -71,7 +111,7 @@ function setStartBtn(state) {
     btnStart.disabled = false;
     btnStart.classList.remove("is-loading");
     btnStartLabel.textContent = "Start Session";
-    btnStop.disabled = false;
+    btnStop.disabled = true;
   }
 }
 
@@ -464,7 +504,7 @@ function closeStream() {
 
 function openStream() {
   closeStream();
-  showWarmupBar();
+  startCountdown();
 
   let firstSegment = true;
   activeStream = new EventSource(apiUrl("/api/transcription/stream"));
@@ -475,7 +515,8 @@ function openStream() {
       if (data && typeof data.text === "string") {
         if (firstSegment) {
           firstSegment = false;
-          setStatus("Running — transcription lines appear below.", "success");
+          statusEl.className = "success";
+          startSessionTimer();
           setStartBtn("running");
         }
         appendTranscript(data.text);
@@ -524,7 +565,9 @@ async function handleStart() {
     }
 
     clearTranscript();
-    setStatus("Warming up — processing first audio window…");
+    stopSessionTimer();
+    sessionStartTime = null;
+    setStatus("");
     openStream();
   } catch (err) {
     setStatus("Network error: " + err.message, "error");
@@ -533,8 +576,12 @@ async function handleStart() {
 }
 
 async function handleStop() {
+  const duration = getSessionDuration();
+  stopSessionTimer();
   closeStream();
   setStartBtn("idle");
+  const durationStr = duration !== null ? ` Session ran for ${formatDuration(duration)}.` : "";
+  setStatus(`Stopped.${durationStr}`);
 
   try {
     const res = await fetch(apiUrl("/api/stop"), { method: "POST" });
@@ -542,10 +589,7 @@ async function handleStop() {
     if (!res.ok) {
       const detail = parseErrorDetail(await res.text());
       setStatus(`Stop failed (${res.status}): ${detail}`, "error");
-      return;
     }
-
-    setStatus("Stopped.");
   } catch (err) {
     setStatus("Network error: " + err.message, "error");
   }

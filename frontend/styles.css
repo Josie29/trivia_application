@@ -305,6 +305,13 @@ button.is-loading::before {
   color: var(--color-success);
 }
 
+.session-timer {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  font-size: 0.85em;
+  margin-left: 0.4em;
+}
+
 .status-dot {
   width: 7px;
   height: 7px;

@@ -73,8 +73,11 @@ class Config:
     @classmethod
     def validate(cls):
         """Validate configuration for the CLI assistant (requires Twitch URL in env)."""
-        if not cls.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY not set in .env file")
+        if cls.ENABLE_QUESTION_EXTRACTION and not cls.OPENAI_API_KEY:
+            raise ValueError(
+                "OPENAI_API_KEY not set in .env file "
+                "(required when ENABLE_QUESTION_EXTRACTION=true)"
+            )
 
         if not cls.TWITCH_CHANNEL_URL:
             raise ValueError("TWITCH_CHANNEL_URL not set in .env file")
@@ -82,6 +85,26 @@ class Config:
         cls._ensure_data_dirs()
 
         return True
+
+    @classmethod
+    def log_config(cls) -> None:
+        """Log all effective configuration values (API key masked)."""
+        import logging
+        logger = logging.getLogger(__name__)
+        api_key = cls.OPENAI_API_KEY
+        masked = f"{api_key[:8]}..." if api_key else "(not set)"
+        logger.info("Config: OPENAI_API_KEY=%s", masked)
+        logger.info(
+            "Config: WHISPER_MODEL_SIZE=%s  WHISPER_DEVICE=%s  WHISPER_COMPUTE_TYPE=%s",
+            cls.WHISPER_MODEL_SIZE, cls.WHISPER_DEVICE, cls.WHISPER_COMPUTE_TYPE,
+        )
+        logger.info(
+            "Config: AUDIO_WINDOW_SECONDS=%s  SEGMENT_INTERVAL_SECONDS=%s",
+            cls.AUDIO_WINDOW_SECONDS, cls.SEGMENT_INTERVAL_SECONDS,
+        )
+        logger.info("Config: ENABLE_QUESTION_EXTRACTION=%s", cls.ENABLE_QUESTION_EXTRACTION)
+        logger.info("Config: LOG_LEVEL=%s", cls.LOG_LEVEL)
+        logger.info("Config: TWITCH_CHANNEL_URL=%s", cls.TWITCH_CHANNEL_URL or "(not set)")
 
     @classmethod
     def validate_for_api(cls):
