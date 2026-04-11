@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.staticfiles import StaticFiles
 
-from config import Config
+from config import Config, get_question_log_database_url
 from core import LiveTriviaAssistant
 import question_log_store
 from schemas import (
@@ -203,6 +203,8 @@ def create_app() -> FastAPI:
     Returns:
         fastapi.FastAPI: Configured app instance.
     """
+    question_log_store.configure(get_question_log_database_url())
+
     app = FastAPI(title="Trivia Transcription API", version="0.1.0")
 
     app.add_middleware(
@@ -236,10 +238,10 @@ def create_app() -> FastAPI:
 
     @app.post("/api/start", response_model=StartSessionResponse)
     async def api_start(body: StartSessionRequest) -> StartSessionResponse:
-        """Start capturing and transcribing the given Twitch channel.
+        """Start capturing and transcribing the given stream (Twitch or HTTP audio).
 
         Args:
-            body: Parsed JSON body with ``twitch_url``.
+            body: Parsed JSON body with ``twitch_url`` (Twitch or direct HTTP(S) URL).
 
         Returns:
             StartSessionResponse: Confirmation payload.
@@ -260,7 +262,7 @@ def create_app() -> FastAPI:
             logger.exception("Failed to start session")
             raise HTTPException(
                 status_code=500,
-                detail="Failed to start session. Check logs and Twitch URL.",
+                detail="Failed to start session. Check logs and stream URL.",
             ) from exc
 
         return StartSessionResponse(

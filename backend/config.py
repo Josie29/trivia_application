@@ -11,6 +11,22 @@ from dotenv import load_dotenv
 # Load backend/.env regardless of current working directory (e.g. repo root vs backend/).
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+
+def get_question_log_database_url() -> str | None:
+    """Return the shared question log database URL from the environment.
+
+    Uses ``QUESTION_LOG_DATABASE_URL`` if set, else ``DATABASE_URL`` (injected by Render
+    when a PostgreSQL instance is linked). Returns ``None`` for in-memory storage.
+
+    Returns:
+        PostgreSQL or SQLite URL, or ``None``.
+    """
+
+    return (
+        os.getenv("QUESTION_LOG_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
+    ).strip() or None
+
+
 class Config:
     # API Keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -61,7 +77,7 @@ class Config:
     
     # Paths
     TEMP_AUDIO_DIR = "data/temp"
-    
+
     @classmethod
     def _ensure_data_dirs(cls):
         """Create standard data and log directories if missing."""
@@ -105,6 +121,16 @@ class Config:
         logger.info("Config: ENABLE_QUESTION_EXTRACTION=%s", cls.ENABLE_QUESTION_EXTRACTION)
         logger.info("Config: LOG_LEVEL=%s", cls.LOG_LEVEL)
         logger.info("Config: TWITCH_CHANNEL_URL=%s", cls.TWITCH_CHANNEL_URL or "(not set)")
+        db_url = get_question_log_database_url()
+        if db_url:
+            db_kind = (
+                "postgresql"
+                if "postgresql" in db_url or "postgres" in db_url
+                else "sqlite"
+            )
+            logger.info("Config: QUESTION_LOG_DATABASE_URL=(set, %s)", db_kind)
+        else:
+            logger.info("Config: QUESTION_LOG_DATABASE_URL=(in-memory)")
 
     @classmethod
     def validate_for_api(cls):
