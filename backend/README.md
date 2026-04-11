@@ -43,7 +43,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Notable packages: `streamlink`, `faster-whisper`, `openai`, `openpyxl`, `fastapi`, `uvicorn`.
+Notable packages: `streamlink`, `faster-whisper`, `openai`, `openpyxl`, `fastapi`, `uvicorn`, `sqlalchemy`, `psycopg2-binary` (PostgreSQL driver for persistent question log).
 
 ### 3. Environment file
 
@@ -110,14 +110,14 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/health` | Liveness |
-| `POST` | `/api/start` | Body: `{"twitch_url": "https://www.twitch.tv/..."}` |
+| `POST` | `/api/start` | Body: `{"twitch_url": "https://..."}` — Twitch channel **or** direct HTTP(S) audio (e.g. Icecast ``.mp3``); field name unchanged for compatibility |
 | `POST` | `/api/stop` | Stop session |
 | `GET` | `/api/config` | JSON: `audio_window_seconds`, `segment_interval_seconds` (progress bar + UI timing) |
 | `GET` | `/api/transcription/stream` | SSE: JSON lines `{"text": "..."}` |
 | `GET` | `/api/questions` | Shared question log: sorted by hour, then question number |
 | `POST` | `/api/questions` | Body: `{"hour": 1, "question_number": 2, "text": "..."}` — upsert; response includes `overwritten` |
 
-**Deployment:** One in-memory session and background threads — use **one Uvicorn worker** (e.g. `--workers 1`) until you add shared state. The **shared question log** is also in-memory (resets on process restart); Twitch access may fail from some cloud datacenters; home/VPS often works better.
+**Deployment:** One in-memory session and background threads — use **one Uvicorn worker** (e.g. `--workers 1`). The **shared question log** persists when **`DATABASE_URL`** or **`QUESTION_LOG_DATABASE_URL`** is set (PostgreSQL on Render, or SQLite locally); otherwise it is in-memory only. Twitch access may fail from some cloud datacenters; home/VPS often works better.
 
 **Production:** deploy the full app on **Render** with the repo-root [`../Dockerfile`](../Dockerfile) (bundles `../frontend/`). See [`../DEPLOY.md`](../DEPLOY.md).
 
@@ -133,7 +133,8 @@ backend/
   run.py            # Dev server: validate_for_api + uvicorn
   api.py            # FastAPI app
   schemas.py        # Request/response + SSE payload models
-  question_log_store.py  # Shared in-memory question log (hour + Q#)
+  question_log_store.py  # Shared question log (hour + Q#); memory or SQLAlchemy
+  question_log_db.py      # ORM model + engine helpers (Postgres / SQLite)
   config.py
   requirements.txt
   core/             # Capture, Whisper, sliding window, extraction, Excel

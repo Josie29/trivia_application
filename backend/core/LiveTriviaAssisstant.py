@@ -16,14 +16,14 @@ from .StreamingTranscriber import StreamingTranscriber
 class LiveTriviaAssistant:
     def __init__(
         self,
-        twitch_channel_url: str,
+        stream_url: str,
         on_transcription: Optional[Callable[[str], None]] = None,
         quiet: bool = False,
     ):
         """Wire capture, transcription, extraction, and sliding-window processing.
 
         Args:
-            twitch_channel_url: Full Twitch channel URL (e.g. https://www.twitch.tv/name).
+            stream_url: Twitch channel URL or a direct HTTP(S) audio stream (e.g. Icecast ``.mp3``).
             on_transcription: Optional callback for each non-duplicate transcription.
             quiet: If True, omit decorative console output (e.g. for API use).
         """
@@ -33,7 +33,7 @@ class LiveTriviaAssistant:
             print("🎮 LIVE TRIVIA ASSISTANT")
             print("=" * 60)
 
-        self.stream_capture = LiveTwitchAudioCapture(twitch_channel_url)
+        self.stream_capture = LiveTwitchAudioCapture(stream_url)
         self.transcriber = StreamingTranscriber(
             model_size=Config.WHISPER_MODEL_SIZE,
             device=Config.WHISPER_DEVICE,

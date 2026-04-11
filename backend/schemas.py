@@ -8,12 +8,16 @@ from pydantic import BaseModel, Field, field_validator
 class StartSessionRequest(BaseModel):
     """Client body for ``POST /api/start``."""
 
-    twitch_url: str = Field(..., min_length=1, description="Twitch channel URL")
+    twitch_url: str = Field(
+        ...,
+        min_length=1,
+        description="Twitch channel or direct HTTP(S) audio stream URL (field name kept for compatibility)",
+    )
 
     @field_validator("twitch_url")
     @classmethod
-    def normalize_twitch_url(cls, value: str) -> str:
-        """Strip whitespace and ensure the URL looks like a Twitch channel URL.
+    def normalize_stream_url(cls, value: str) -> str:
+        """Strip whitespace and validate an http(s) URL (Twitch or arbitrary stream).
 
         Args:
             value: Raw URL string from the client.
@@ -22,7 +26,7 @@ class StartSessionRequest(BaseModel):
             str: Normalized URL string.
 
         Raises:
-            ValueError: If the string is empty, missing a valid scheme, or not Twitch.
+            ValueError: If the string is empty or missing a valid http(s) scheme.
         """
         stripped = value.strip()
         if not stripped:
@@ -30,9 +34,8 @@ class StartSessionRequest(BaseModel):
         parsed = urlparse(stripped)
         if parsed.scheme not in ("http", "https"):
             raise ValueError("URL must use http or https")
-        host = (parsed.hostname or "").lower()
-        if "twitch.tv" not in host:
-            raise ValueError("URL must be a Twitch channel (hostname must include twitch.tv)")
+        if not parsed.netloc:
+            raise ValueError("URL must include a host")
         return stripped
 
 

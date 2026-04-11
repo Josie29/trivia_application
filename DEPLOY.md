@@ -37,8 +37,18 @@ Keep [`frontend/config.js`](frontend/config.js) as `window.__TRIVIA_API_BASE__ =
 | `AUDIO_WINDOW_SECONDS` / `SEGMENT_INTERVAL_SECONDS` | No | Whisper window length and seconds between transcription runs (see `config.py`). |
 | `LOG_LEVEL` | No | Default `INFO`. |
 | `TWITCH_CHANNEL_URL` | No | Only for CLI (`main.py`); the web UI sends the URL per request. |
+| `DATABASE_URL` | **Recommended** | **PostgreSQL** connection string. Render injects this automatically when you create a **PostgreSQL** instance and **link** it to your Web Service (Dashboard → your DB → **Connections** / link to service). The shared **question log** is stored here so it **survives deploys and restarts**. If unset, the log stays **in-memory only** (lost on restart). |
+| `QUESTION_LOG_DATABASE_URL` | No | Override for the question log only (same format as `DATABASE_URL`). Use if you want a different DB than the default `DATABASE_URL`. |
 
 `PORT` is set by Render; the Docker `CMD` already uses it.
+
+### Shared question log (PostgreSQL on Render)
+
+1. In the Render dashboard, create a **PostgreSQL** instance (free tier available with limits).
+2. Link that database to your **Web Service** (or copy the **Internal Database URL** / **External Database URL** into the Web Service env as `DATABASE_URL`).
+3. Redeploy the Web Service. On startup the app runs SQLAlchemy `create_all` for the `question_log` table—no manual migration file is required for the initial schema.
+
+Locally you can use **SQLite** instead, e.g. `QUESTION_LOG_DATABASE_URL=sqlite:///./data/question_log.sqlite` in `backend/.env` (the `data/` directory is created if needed).
 
 ### “SSL” or CORS errors in the browser
 
@@ -69,6 +79,7 @@ Set Render’s health check path to `/health` if the dashboard offers it.
 - [ ] `frontend/config.js` uses `__TRIVIA_API_BASE__ = ""`
 - [ ] Custom domain: add that `https://…` origin to `CORS_ORIGINS` if needed
 - [ ] Optional: `/health` configured as health check
+- [ ] Optional: PostgreSQL linked so `DATABASE_URL` is set (persistent shared question log)
 
 ---
 

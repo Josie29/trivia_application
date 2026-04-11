@@ -10,7 +10,7 @@
 
   <header>
     <h1><span class="logo-dot"></span>Trivia AI</h1>
-    <p>Connect to any live Twitch stream and watch AI transcribe and extract trivia questions in real time.</p>
+    <p>Connect to a live Twitch channel or HTTP audio stream (e.g. contest radio) and watch AI transcribe and extract trivia questions in real time.</p>
   </header>
 
   <div class="feature-pills">
@@ -30,13 +30,13 @@
 
   <div class="main-layout">
     <div class="card card-stream">
-      <label for="twitchUrl">Twitch channel URL</label>
+      <label for="twitchUrl">Stream URL</label>
       <div class="input-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
         </svg>
-        <input id="twitchUrl" type="url" placeholder="https://www.twitch.tv/channel" autocomplete="off" />
+        <input id="twitchUrl" type="url" placeholder="https://www.twitch.tv/channel or https://host:port/radio.mp3" autocomplete="off" />
       </div>
 
       <div class="actions">

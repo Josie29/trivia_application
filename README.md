@@ -1,12 +1,12 @@
 # Trivia Transcription Assistant
 
-Capture live Twitch trivia audio, transcribe with Faster-Whisper, extract questions with OpenAI, and save structured rows to Excel—optionally driven from the terminal or from a minimal browser UI.
+Capture live audio from an HTTP stream (e.g. contest radio) or Twitch, transcribe with Faster-Whisper, extract questions with OpenAI, and save structured rows to Excel—optionally driven from the terminal or from a minimal browser UI.
 
 ---
 
 ## Features
 
-- Live Twitch ingest (Streamlink + FFmpeg), no manual audio routing
+- Live ingest: direct HTTP(S) streams (FFmpeg) or Twitch (Streamlink + FFmpeg)
 - Real-time transcription (Faster-Whisper) with sliding windows and VAD-friendly settings
 - Question extraction (OpenAI) with hour/number/picture-question hints
 - Transcription- and question-level deduplication
@@ -30,7 +30,7 @@ Capture live Twitch trivia audio, transcribe with Faster-Whisper, extract questi
 ## How it works
 
 ```text
-LIVE TWITCH (audio) → Streamlink → FFmpeg → PCM queue
+LIVE AUDIO (HTTP or Twitch) → FFmpeg (or Streamlink+FFmpeg for Twitch) → PCM queue
     → Sliding-window chunks → Whisper → dedupe (transcript)
     → OpenAI extraction → dedupe (question) → Excel sheets by hour
 ```
@@ -68,7 +68,7 @@ echo "OPENAI_API_KEY=sk-..." > .env
 python run.py
 ```
 
-Then open **[http://localhost:8000](http://localhost:8000)** — FastAPI serves `frontend/index.html` at that URL, identical to the Render deployment. Paste a live Twitch channel URL into the form and hit Start.
+Then open **[http://localhost:8000](http://localhost:8000)** — FastAPI serves `frontend/index.html` at that URL, identical to the Render deployment. Paste your stream URL (Twitch or direct HTTP audio, e.g. `https://example.com:port/stream.mp3`) and hit Start.
 
 > The first run downloads the Whisper model (~140 MB for `base`) and caches it.
 
@@ -88,7 +88,7 @@ You need **Python 3.8+**, **FFmpeg**, and an **OpenAI API key**. See [backend/RE
 
 ## Configuration (overview)
 
-Environment variables are read from a `.env` file—place it in **`backend/`** if you start the app from there (recommended). The CLI requires a Twitch URL in env; the web server can take the URL from the form instead. Full variable list and validation rules: [**backend/README.md**](backend/README.md#3-environment-file).
+Environment variables are read from a `.env` file—place it in **`backend/`** if you start the app from there (recommended). The CLI uses a stream URL from env when applicable; the web server takes the URL from the form. Full variable list and validation rules: [**backend/README.md**](backend/README.md#3-environment-file).
 
 ---
 
