@@ -15,6 +15,7 @@ from question_log_db import (
     init_schema,
     make_session_factory,
 )
+from question_log_scoring import compute_got_correct
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -37,6 +38,45 @@ class LoggedQuestionEntry:
     question_number: int
     text: str
     updated_at: str
+    our_answer: str
+    actual_answer: str
+    point_value: int
+    got_correct: bool
+
+
+def _merge_str(
+    incoming: Optional[str],
+    previous: str,
+) -> str:
+    """Apply optional update to a stored string field.
+
+    Args:
+        incoming: New value from client, or ``None`` to keep ``previous``.
+        previous: Existing stored value.
+
+    Returns:
+        str: Stripped new value, or ``previous`` when ``incoming`` is ``None``.
+    """
+
+    if incoming is not None:
+        return incoming.strip()
+    return previous
+
+
+def _merge_points(incoming: Optional[int], previous: int) -> int:
+    """Apply optional update to point value.
+
+    Args:
+        incoming: New value, or ``None`` to keep ``previous``.
+        previous: Existing point value.
+
+    Returns:
+        int: Non-negative points.
+    """
+
+    if incoming is not None:
+        return max(0, int(incoming))
+    return previous
 
 
 def configure(database_url: str | None) -> None:
@@ -92,6 +132,25 @@ def clear() -> None:
                 session.commit()
 
 
+def _row_to_entry(r: QuestionLogRow) -> LoggedQuestionEntry:
+    """Map ORM row to API entry with normalized strings and recomputed correctness."""
+
+    our = (r.our_answer or "").strip()
+    actual = (r.actual_answer or "").strip()
+    pts = int(r.point_value or 0)
+    gc = compute_got_correct(our, actual)
+    return LoggedQuestionEntry(
+        hour=r.hour,
+        question_number=r.question_number,
+        text=r.text,
+        updated_at=r.updated_at,
+        our_answer=our,
+        actual_answer=actual,
+        point_value=pts,
+        got_correct=gc,
+    )
+
+
 def list_sorted() -> list[LoggedQuestionEntry]:
     """Return all questions sorted by hour, then question number.
 
@@ -103,31 +162,36 @@ def list_sorted() -> list[LoggedQuestionEntry]:
         with _lock:
             items = list(_memory.values())
         items.sort(key=lambda e: (e.hour, e.question_number))
-        return items
+        return list(items)
 
     assert _SessionLocal is not None
     with _SessionLocal() as session:
         rows = session.execute(
             select(QuestionLogRow).order_by(QuestionLogRow.hour, QuestionLogRow.question_number)
         ).scalars().all()
-    return [
-        LoggedQuestionEntry(
-            hour=r.hour,
-            question_number=r.question_number,
-            text=r.text,
-            updated_at=r.updated_at,
-        )
-        for r in rows
-    ]
+    return [_row_to_entry(r) for r in rows]
 
 
-def upsert(hour: int, question_number: int, text: str) -> tuple[bool, LoggedQuestionEntry]:
+def upsert(
+    hour: int,
+    question_number: int,
+    text: str,
+    *,
+    our_answer: Optional[str] = None,
+    actual_answer: Optional[str] = None,
+    point_value: Optional[int] = None,
+) -> tuple[bool, LoggedQuestionEntry]:
     """Insert or replace the question for (hour, question_number).
+
+    Optional scoring fields default to ``None`` to mean \"keep existing\" on update.
 
     Args:
         hour: Trivia hour (>= 1).
         question_number: Question index within that hour (>= 1).
-        text: Question body.
+        text: Question body (always updated).
+        our_answer: Team answer text, or ``None`` to preserve prior.
+        actual_answer: Correct answer text, or ``None`` to preserve prior.
+        point_value: Points for this question, or ``None`` to preserve prior.
 
     Returns:
         Tuple of (whether an existing row was replaced, the stored entry).
@@ -138,16 +202,28 @@ def upsert(hour: int, question_number: int, text: str) -> tuple[bool, LoggedQues
         datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     )
     key = (hour, question_number)
-    entry = LoggedQuestionEntry(
-        hour=hour,
-        question_number=question_number,
-        text=stripped,
-        updated_at=now,
-    )
 
     if not _use_database:
         with _lock:
+            prev = _memory.get(key)
+            prev_our = prev.our_answer if prev else ""
+            prev_actual = prev.actual_answer if prev else ""
+            prev_pts = prev.point_value if prev else 0
+            final_our = _merge_str(our_answer, prev_our)
+            final_actual = _merge_str(actual_answer, prev_actual)
+            final_pts = _merge_points(point_value, prev_pts)
+            gc = compute_got_correct(final_our, final_actual)
             overwritten = key in _memory
+            entry = LoggedQuestionEntry(
+                hour=hour,
+                question_number=question_number,
+                text=stripped,
+                updated_at=now,
+                our_answer=final_our,
+                actual_answer=final_actual,
+                point_value=final_pts,
+                got_correct=gc,
+            )
             _memory[key] = entry
         return overwritten, entry
 
@@ -161,16 +237,37 @@ def upsert(hour: int, question_number: int, text: str) -> tuple[bool, LoggedQues
         ).scalar_one_or_none()
         overwritten = existing is not None
         if existing:
+            prev_our = (existing.our_answer or "").strip()
+            prev_actual = (existing.actual_answer or "").strip()
+            prev_pts = int(existing.point_value or 0)
+            final_our = _merge_str(our_answer, prev_our)
+            final_actual = _merge_str(actual_answer, prev_actual)
+            final_pts = _merge_points(point_value, prev_pts)
+            gc = compute_got_correct(final_our, final_actual)
             existing.text = stripped
             existing.updated_at = now
-        else:
-            session.add(
-                QuestionLogRow(
-                    hour=hour,
-                    question_number=question_number,
-                    text=stripped,
-                    updated_at=now,
-                )
-            )
+            existing.our_answer = final_our or None
+            existing.actual_answer = final_actual or None
+            existing.point_value = final_pts
+            existing.got_correct = gc
+            session.commit()
+            session.refresh(existing)
+            return overwritten, _row_to_entry(existing)
+        final_our = _merge_str(our_answer, "")
+        final_actual = _merge_str(actual_answer, "")
+        final_pts = _merge_points(point_value, 0)
+        gc = compute_got_correct(final_our, final_actual)
+        new_row = QuestionLogRow(
+            hour=hour,
+            question_number=question_number,
+            text=stripped,
+            updated_at=now,
+            our_answer=final_our or None,
+            actual_answer=final_actual or None,
+            point_value=final_pts,
+            got_correct=gc,
+        )
+        session.add(new_row)
         session.commit()
-        return overwritten, entry
+        session.refresh(new_row)
+        return False, _row_to_entry(new_row)

@@ -91,6 +91,14 @@ class TestQuestionLogAPI(unittest.TestCase):
         )
         self.assertEqual(res2.status_code, 422)
 
+    def test_validation_rejects_hour_above_contest_max(self) -> None:
+        """Hour must not exceed 56 (long contest coverage)."""
+        res = self.client.post(
+            "/api/questions",
+            json={"hour": 57, "question_number": 1, "text": "Too late"},
+        )
+        self.assertEqual(res.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()
