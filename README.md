@@ -12,6 +12,7 @@ Capture live audio from an HTTP stream (e.g. contest radio) or Twitch, transcrib
 - Transcription- and question-level deduplication
 - Excel workbook output (`data/trivia_questions.xlsx` when run with `backend/` as cwd)
 - **CLI** (`backend/main.py`) or **browser** UI (static files under `frontend/`, served by FastAPI locally or with the API in one Docker image on Render)
+- **Browser:** one shared transcription session per server — every viewer gets the same live SSE stream (fan-out); late joiners receive a short replay of recent chunks; `GET /api/session` exposes whether a session is running
 
 ---
 

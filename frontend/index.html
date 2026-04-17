@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trivia AI — Live Stream Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=10" />
 </head>
 <body>
 
   <header>
     <h1><span class="logo-dot"></span>Trivia AI</h1>
-    <p>Connect to a live Twitch channel or HTTP audio stream (e.g. contest radio) and watch AI transcribe and extract trivia questions in real time.</p>
+    <p>Connect to a live Twitch channel or HTTP audio stream (e.g. contest radio) and watch AI transcribe and extract trivia questions in real time. <strong>One shared session</strong> — everyone sees the same live transcript; only one stream runs at a time.</p>
   </header>
 
   <div class="feature-pills" aria-hidden="true">
@@ -31,7 +31,7 @@
   <main class="site-main" id="main">
   <div class="main-layout">
     <div class="card card-stream">
-      <label for="twitchUrl">Stream URL</label>
+      <label for="twitchUrl">Stream URL <span class="field-hint">(set when starting; shared for all viewers)</span></label>
       <div class="input-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -121,7 +121,7 @@
   </div>
   </main>
 
-  <script src="config.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="config.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
