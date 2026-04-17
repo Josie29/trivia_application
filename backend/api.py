@@ -22,6 +22,7 @@ from schemas import (
     LoggedQuestion,
     QuestionLogListResponse,
     SessionConfigResponse,
+    SessionStatusResponse,
     StartSessionRequest,
     StartSessionResponse,
     StopSessionResponse,
@@ -29,6 +30,7 @@ from schemas import (
     UpsertQuestionRequest,
     UpsertQuestionResponse,
 )
+from transcription_fanout import TranscriptionFanout
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -46,12 +48,13 @@ class SessionNotRunningError(Exception):
 
 
 class _SessionState:
-    """In-process session: one Twitch pipeline and one event queue for SSE."""
+    """In-process session: one pipeline and fan-out to all SSE subscribers."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.assistant: LiveTriviaAssistant | None = None
-        self.event_queue: queue.Queue[str | Any] | None = None
+        self.broadcaster: TranscriptionFanout | None = None
+        self.stream_url: str | None = None
 
 
 _state = _SessionState()
@@ -115,17 +118,16 @@ def _sync_start(url: str) -> None:
         if _state.assistant is not None:
             raise SessionAlreadyRunningError()
 
-        event_queue: queue.Queue[str | Any] = queue.Queue(maxsize=500)
-        _state.event_queue = event_queue
+        fanout = TranscriptionFanout()
+        _state.broadcaster = fanout
+        _state.stream_url = url
 
         def on_transcription(text: str) -> None:
             try:
                 payload = TranscriptionEvent(text=text).model_dump_json()
-                event_queue.put_nowait(payload)
-            except queue.Full:
-                logger.warning("Transcription event queue full; dropping one event")
+                fanout.publish(payload)
             except Exception:
-                logger.exception("Failed to enqueue transcription event")
+                logger.exception("Failed to publish transcription event")
 
         assistant = LiveTriviaAssistant(
             url,
@@ -138,7 +140,8 @@ def _sync_start(url: str) -> None:
             assistant.start()
         except Exception:
             _state.assistant = None
-            _state.event_queue = None
+            _state.broadcaster = None
+            _state.stream_url = None
             raise
 
 
@@ -150,9 +153,10 @@ def _sync_stop() -> None:
     """
     with _state.lock:
         assistant = _state.assistant
-        event_queue = _state.event_queue
+        fanout = _state.broadcaster
         _state.assistant = None
-        _state.event_queue = None
+        _state.broadcaster = None
+        _state.stream_url = None
 
     if assistant is None:
         raise SessionNotRunningError()
@@ -160,22 +164,24 @@ def _sync_stop() -> None:
     try:
         assistant.stop()
     finally:
-        if event_queue is not None:
-            try:
-                event_queue.put_nowait(_SSE_STOP)
-            except queue.Full:
-                logger.warning("Could not enqueue SSE stop sentinel; queue full")
+        if fanout is not None:
+            fanout.publish_stop(_SSE_STOP)
 
 
 async def _sse_event_generator(
+    fanout: TranscriptionFanout,
     q: queue.Queue[str | Any],
+    snapshot: list[str],
 ) -> AsyncIterator[str]:
-    """Yield Server-Sent Events lines until stop sentinel or client disconnect.
+    """Yield Server-Sent Events: replay history for late joiners, then live queue.
 
-    Client disconnect cancels the async iterator (Starlette).
+    Client disconnect cancels the async iterator (Starlette); the queue is then
+    unsubscribed in ``finally``.
 
     Args:
-        q: Queue populated with JSON strings or ``_SSE_STOP``.
+        fanout: Active fan-out hub for this session.
+        q: This client's queue (registered with ``fanout``).
+        snapshot: History replay payloads (JSON strings) to send first.
 
     Yields:
         str: Lines including ``data:`` payloads for SSE.
@@ -188,13 +194,18 @@ async def _sse_event_generator(
         except queue.Empty:
             return None
 
-    while True:
-        item = await loop.run_in_executor(None, _get_item, 1.0)
-        if item is None:
-            continue
-        if item is _SSE_STOP:
-            break
-        yield f"data: {item}\n\n"
+    try:
+        for item in snapshot:
+            yield f"data: {item}\n\n"
+        while True:
+            item = await loop.run_in_executor(None, _get_item, 1.0)
+            if item is None:
+                continue
+            if item is _SSE_STOP:
+                break
+            yield f"data: {item}\n\n"
+    finally:
+        fanout.unsubscribe(q)
 
 
 def create_app() -> FastAPI:
@@ -223,6 +234,20 @@ def create_app() -> FastAPI:
             HealthResponse: Fixed OK payload.
         """
         return HealthResponse()
+
+    @app.get("/api/session", response_model=SessionStatusResponse)
+    def api_session_status() -> SessionStatusResponse:
+        """Return whether a shared live session is running and its stream URL.
+
+        All browsers use the same session; this lets clients join or show controls.
+
+        Returns:
+            SessionStatusResponse: Active flag and current stream URL when running.
+        """
+        with _state.lock:
+            active = _state.assistant is not None
+            stream_url = _state.stream_url if active else None
+        return SessionStatusResponse(active=active, stream_url=stream_url)
 
     @app.get("/api/config", response_model=SessionConfigResponse)
     def api_config() -> SessionConfigResponse:
@@ -357,16 +382,17 @@ def create_app() -> FastAPI:
             HTTPException: If no session is active (503).
         """
         with _state.lock:
-            q = _state.event_queue
+            fanout = _state.broadcaster
 
-        if q is None:
+        if fanout is None:
             raise HTTPException(
                 status_code=503,
                 detail="No active session. POST /api/start first.",
             )
 
+        q, snapshot = fanout.subscribe()
         return StreamingResponse(
-            _sse_event_generator(q),
+            _sse_event_generator(fanout, q, snapshot),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

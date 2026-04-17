@@ -78,6 +78,16 @@ class SessionConfigResponse(BaseModel):
     segment_interval_seconds: int = Field(description="Seconds between each new transcription being triggered")
 
 
+class SessionStatusResponse(BaseModel):
+    """Whether a shared live transcription session is running and which URL it uses."""
+
+    active: bool = Field(description="True when capture/transcription is running")
+    stream_url: str | None = Field(
+        default=None,
+        description="Stream URL for the current session, or null when none",
+    )
+
+
 class LoggedQuestion(BaseModel):
     """One row in the shared question log."""
 

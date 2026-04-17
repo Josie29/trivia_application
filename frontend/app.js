@@ -52,6 +52,9 @@ const questionLogPointTotalEl = document.getElementById(
   "questionLogPointTotal"
 );
 
+/** True when the server reports an active shared transcription session (may differ from SSE). */
+let serverSessionActive = false;
+
 // ── Status bar ───────────────────────────────────────────────────────────────
 
 function setStatus(msg, type) {
@@ -101,6 +104,10 @@ function getSessionDuration() {
 
 // ── Button states ─────────────────────────────────────────────────────────────
 
+function syncStopButtonFromServerState() {
+  btnStop.disabled = !(activeStream || serverSessionActive);
+}
+
 function setStartBtn(state) {
   // state: "idle" | "connecting" | "running"
   if (state === "connecting") {
@@ -111,13 +118,13 @@ function setStartBtn(state) {
   } else if (state === "running") {
     btnStart.disabled = true;
     btnStart.classList.remove("is-loading");
-    btnStartLabel.textContent = "Start Session";
+    btnStartLabel.textContent = "Start session";
     btnStop.disabled = false;
   } else {
     btnStart.disabled = false;
     btnStart.classList.remove("is-loading");
-    btnStartLabel.textContent = "Start Session";
-    btnStop.disabled = true;
+    btnStartLabel.textContent = serverSessionActive ? "Join live" : "Start session";
+    syncStopButtonFromServerState();
   }
 }
 
@@ -1045,6 +1052,12 @@ function stopCountdown() {
 
 let activeStream = null;
 
+/**
+ * Incremented when replacing or tearing down the stream so stale ``onerror``
+ * callbacks from a previous EventSource do not clobber UI or status text.
+ */
+let streamGeneration = 0;
+
 function closeStream() {
   if (activeStream) {
     activeStream.close();
@@ -1053,14 +1066,61 @@ function closeStream() {
   stopCountdown();
 }
 
+/**
+ * Fetches shared session status from the server and updates URL field + buttons.
+ *
+ * @param {object} [payload] - Optional pre-parsed JSON from GET /api/session.
+ * @returns {Promise<object|null>}
+ */
+async function refreshSessionStatus(payload) {
+  try {
+    const data =
+      payload !== undefined
+        ? payload
+        : await fetch(apiUrl("/api/session")).then(function (r) {
+            return r.ok ? r.json() : null;
+          });
+    if (data && typeof data.active === "boolean") {
+      applySessionStatus(data);
+    }
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Applies GET /api/session payload: shared URL, read-only while live, Join vs Start label.
+ *
+ * @param {{ active: boolean, stream_url?: string|null }} data - Session status from API.
+ */
+function applySessionStatus(data) {
+  serverSessionActive = !!data.active;
+  if (data.active && data.stream_url) {
+    urlInput.value = data.stream_url;
+    urlInput.readOnly = true;
+    if (!activeStream) {
+      btnStartLabel.textContent = "Join live";
+    }
+  } else {
+    urlInput.readOnly = false;
+    if (!activeStream) {
+      btnStartLabel.textContent = "Start session";
+    }
+  }
+  syncStopButtonFromServerState();
+}
+
 function openStream() {
   closeStream();
+  const myGen = ++streamGeneration;
   startCountdown();
 
   let firstSegment = true;
   activeStream = new EventSource(apiUrl("/api/transcription/stream"));
 
   activeStream.onmessage = function (ev) {
+    if (myGen !== streamGeneration) return;
     try {
       const data = JSON.parse(ev.data);
       if (data && typeof data.text === "string") {
@@ -1079,27 +1139,71 @@ function openStream() {
   };
 
   activeStream.onerror = function () {
-    setStatus("Stream disconnected (stopped or network error).", "error");
-    setStartBtn("idle");
+    if (myGen !== streamGeneration) return;
     closeStream();
+    refreshSessionStatus()
+      .then(function (data) {
+        if (data && data.active) {
+          setStatus(
+            "Stream disconnected — network error. Session may still be running; try Join live.",
+            "error"
+          );
+        } else {
+          setStatus("Live session ended.", "success");
+        }
+        setStartBtn("idle");
+      })
+      .catch(function () {
+        setStatus("Stream disconnected.", "error");
+        setStartBtn("idle");
+      });
   };
 }
 
 // ── Button handlers ──────────────────────────────────────────────────────────
 
+/**
+ * Subscribes to the existing server session (same transcript for all viewers).
+ *
+ * @returns {Promise<void>}
+ */
+async function joinLiveSession() {
+  await fetchSessionConfig();
+  const st = await refreshSessionStatus();
+  if (!st || !st.active) {
+    setStatus("No active session to join.", "error");
+    setStartBtn("idle");
+    return;
+  }
+  clearTranscript();
+  stopSessionTimer();
+  sessionStartTime = null;
+  setStatus("Joining shared live transcript…");
+  setStartBtn("connecting");
+  openStream();
+}
+
 async function handleStart() {
   setStatus("");
+
+  await fetchSessionConfig();
+  const statusRes = await fetch(apiUrl("/api/session"));
+  if (statusRes.ok) {
+    const st = await statusRes.json();
+    if (st.active) {
+      await joinLiveSession();
+      return;
+    }
+  }
+
   const twitchUrl = urlInput.value.trim();
   if (!twitchUrl) {
-    setStatus("Enter a Twitch URL.", "error");
+    setStatus("Enter a stream URL to start the shared session.", "error");
     return;
   }
 
   setStartBtn("connecting");
   setStatus("Connecting to stream…");
-
-  // Always fetch config fresh so any .env changes take effect without a page reload.
-  await fetchSessionConfig();
 
   try {
     const res = await fetch(apiUrl("/api/start"), {
@@ -1108,12 +1212,19 @@ async function handleStart() {
       body: JSON.stringify({ twitch_url: twitchUrl }),
     });
 
+    if (res.status === 409) {
+      await joinLiveSession();
+      return;
+    }
+
     if (!res.ok) {
       const detail = parseErrorDetail(await res.text());
       setStatus(`Start failed (${res.status}): ${detail}`, "error");
       setStartBtn("idle");
       return;
     }
+
+    await refreshSessionStatus({ active: true, stream_url: twitchUrl });
 
     clearTranscript();
     stopSessionTimer();
@@ -1129,26 +1240,69 @@ async function handleStart() {
 async function handleStop() {
   const duration = getSessionDuration();
   stopSessionTimer();
+  streamGeneration++;
   closeStream();
-  setStartBtn("idle");
+
+  btnStart.disabled = true;
+  btnStop.disabled = true;
+  btnStart.classList.remove("is-loading");
+
   const durationStr = duration !== null ? ` Session ran for ${formatDuration(duration)}.` : "";
-  setStatus(`Stopped.${durationStr}`);
+  setStatus("Stopping shared session…");
 
   try {
     const res = await fetch(apiUrl("/api/stop"), { method: "POST" });
 
-    if (!res.ok) {
+    if (res.ok) {
+      await refreshSessionStatus({ active: false, stream_url: null });
+      setStatus(`Stopped for everyone.${durationStr}`);
+    } else if (res.status === 400) {
+      await refreshSessionStatus();
+      const detail = parseErrorDetail(await res.text());
+      const already =
+        /no active session/i.test(detail) ||
+        /no session/i.test(detail);
+      if (already) {
+        setStatus(`Session was already stopped.${durationStr}`, "success");
+      } else {
+        setStatus(`Stop failed: ${detail}`, "error");
+      }
+    } else {
       const detail = parseErrorDetail(await res.text());
       setStatus(`Stop failed (${res.status}): ${detail}`, "error");
+      await refreshSessionStatus();
     }
   } catch (err) {
     setStatus("Network error: " + err.message, "error");
+    await refreshSessionStatus();
+  } finally {
+    setStartBtn("idle");
   }
 }
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
-fetchSessionConfig();
+(async function initSharedSession() {
+  await fetchSessionConfig();
+  const session = await fetch(apiUrl("/api/session"))
+    .then(function (r) {
+      return r.ok ? r.json() : null;
+    })
+    .catch(function () {
+      return null;
+    });
+  if (session) {
+    applySessionStatus(session);
+  }
+  if (session && session.active) {
+    clearTranscript();
+    setStatus("Joining shared live transcript…");
+    setStartBtn("connecting");
+    openStream();
+  } else {
+    setStartBtn("idle");
+  }
+})();
 
 ensureQuestionLogHourSelectOptions();
 syncQuestionLogHourSelectValue();
@@ -1167,6 +1321,11 @@ if (questionLogHourSelectEl) {
 
 btnStart.addEventListener("click", handleStart);
 btnStop.addEventListener("click", handleStop);
+
+setInterval(function () {
+  if (activeStream) return;
+  refreshSessionStatus().catch(function () {});
+}, 15000);
 btnUseSelection.addEventListener("click", handleUseSelectionAsQuestion);
 btnSaveToLog.addEventListener("click", function () {
   handleSaveToSharedLog();
