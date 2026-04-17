@@ -45,6 +45,14 @@ const btnUseSelection    = document.getElementById("btnUseSelection");
 const btnSaveToLog       = document.getElementById("btnSaveToLog");
 const captureFeedbackEl  = document.getElementById("captureFeedback");
 const questionLogEl      = document.getElementById("questionLog");
+const questionLogHoursPerPageEl = document.getElementById(
+  "questionLogHoursPerPage"
+);
+const questionLogPrevEl  = document.getElementById("questionLogPrev");
+const questionLogNextEl  = document.getElementById("questionLogNext");
+const questionLogPageMetaEl = document.getElementById("questionLogPageMeta");
+const questionLogJumpHourEl = document.getElementById("questionLogJumpHour");
+const questionLogGoHourEl = document.getElementById("questionLogGoHour");
 
 // ── Status bar ───────────────────────────────────────────────────────────────
 
@@ -249,8 +257,53 @@ function handleUseSelectionAsQuestion() {
 
 // ── Shared question log (server-backed, all viewers) ─────────────────────────
 
+/** Maximum trivia hour supported in the UI and API (long contests). */
+const QUESTION_LOG_MAX_HOUR = 56;
+
+/**
+ * Largest "Hours per page" value in the toolbar (must not use {@link QUESTION_LOG_MAX_HOUR} here:
+ * capping page size at 56 makes a single page span every hour, so "pagination" disappears).
+ */
+const QUESTION_LOG_MAX_HOURS_PER_PAGE = 14;
+
 /** @type {ReturnType<typeof setInterval> | null} */
 let questionLogPollTimer = null;
+
+/** @type {Array<{ hour: number, question_number: number, text: string, updated_at: string }>} */
+let questionLogCachedQuestions = [];
+
+/** @type {number} */
+let questionLogPageIndex = 0;
+
+/** @type {number} */
+let questionLogHoursPerPage = 8;
+
+/**
+ * Normalizes hours-per-page so range math never sees NaN (which would show every hour).
+ *
+ * @param {number} n - Raw numeric value (may be NaN).
+ * @returns {number}
+ */
+function sanitizeQuestionLogHoursPerPage(n) {
+  if (!Number.isFinite(n) || n < 1) {
+    return 8;
+  }
+  return Math.min(Math.floor(n), QUESTION_LOG_MAX_HOURS_PER_PAGE);
+}
+
+/**
+ * Reads the Hours per page control; falls back to 8 when missing or invalid.
+ *
+ * @returns {number}
+ */
+function getQuestionLogHoursPerPage() {
+  const el = document.getElementById("questionLogHoursPerPage");
+  if (!el) {
+    return sanitizeQuestionLogHoursPerPage(questionLogHoursPerPage);
+  }
+  const raw = parseInt(String(el.value).trim(), 10);
+  return sanitizeQuestionLogHoursPerPage(raw);
+}
 
 /**
  * Parses hour and question number from the form; returns nulls if invalid or missing.
@@ -263,38 +316,95 @@ function parseHourAndQuestionNumber() {
   if (!hourRaw || !qRaw) return null;
   const hour = parseInt(hourRaw, 10);
   const questionNumber = parseInt(qRaw, 10);
-  if (!Number.isFinite(hour) || hour < 1) return null;
+  if (!Number.isFinite(hour) || hour < 1 || hour > QUESTION_LOG_MAX_HOUR) {
+    return null;
+  }
   if (!Number.isFinite(questionNumber) || questionNumber < 1) return null;
   return { hour, questionNumber };
 }
 
 /**
- * Renders the shared log: hours as sections, questions ordered by Q# within each hour.
+ * Returns inclusive hour range [start, end] for a zero-based page index.
  *
- * @param {Array<{ hour: number, question_number: number, text: string, updated_at: string }>} questions
+ * @param {number} pageIndex - Zero-based page.
+ * @param {number} hoursPerPage - Hours shown per page (>= 1).
+ * @returns {{ start: number, end: number }}
  */
-function renderQuestionLog(questions) {
-  questionLogEl.innerHTML = "";
-  if (!questions || questions.length === 0) {
-    const p = document.createElement("p");
-    p.className = "question-log-empty";
-    p.textContent =
-      "No questions saved yet. Set hour and Q#, add text, then click “Save to shared log”.";
-    questionLogEl.appendChild(p);
-    return;
-  }
+function questionLogHourRangeForPage(pageIndex, hoursPerPage) {
+  const start = pageIndex * hoursPerPage + 1;
+  const end = Math.min(QUESTION_LOG_MAX_HOUR, start + hoursPerPage - 1);
+  return { start, end };
+}
 
-  const byHour = new Map();
-  for (const q of questions) {
-    const h = q.hour;
-    if (!byHour.has(h)) byHour.set(h, []);
-    byHour.get(h).push(q);
-  }
+/**
+ * Total pages when slicing the fixed hour span 1..QUESTION_LOG_MAX_HOUR.
+ *
+ * @param {number} hoursPerPage - Hours per page (>= 1).
+ * @returns {number}
+ */
+function questionLogTotalPages(hoursPerPage) {
+  return Math.max(1, Math.ceil(QUESTION_LOG_MAX_HOUR / hoursPerPage));
+}
 
-  const hoursSorted = [...byHour.keys()].sort((a, b) => a - b);
+/**
+ * Zero-based page index that contains the given hour.
+ *
+ * @param {number} hour - Hour in 1..QUESTION_LOG_MAX_HOUR.
+ * @param {number} hoursPerPage
+ * @returns {number}
+ */
+function questionLogPageForHour(hour, hoursPerPage) {
+  return Math.floor((hour - 1) / hoursPerPage);
+}
+
+/**
+ * Clamps {@link questionLogPageIndex} to valid pages for the current hours-per-page.
+ */
+function clampQuestionLogPageIndex() {
+  const hpp = getQuestionLogHoursPerPage();
+  const maxIdx = questionLogTotalPages(hpp) - 1;
+  if (questionLogPageIndex > maxIdx) questionLogPageIndex = maxIdx;
+  if (questionLogPageIndex < 0) questionLogPageIndex = 0;
+}
+
+/**
+ * Updates pagination labels and Previous/Next disabled state.
+ */
+function updateQuestionLogToolbar() {
+  const hpp = getQuestionLogHoursPerPage();
+  const total = questionLogTotalPages(hpp);
+  const range = questionLogHourRangeForPage(questionLogPageIndex, hpp);
+  if (questionLogPageMetaEl) {
+    questionLogPageMetaEl.textContent =
+      "Page " +
+      (questionLogPageIndex + 1) +
+      " of " +
+      total +
+      " · Hours " +
+      range.start +
+      "–" +
+      range.end;
+  }
+  if (questionLogPrevEl) {
+    questionLogPrevEl.disabled = questionLogPageIndex <= 0;
+  }
+  if (questionLogNextEl) {
+    questionLogNextEl.disabled = questionLogPageIndex >= total - 1;
+  }
+}
+
+/**
+ * Appends hour sections for the given hour keys (sorted), using data from {@link byHour}.
+ *
+ * @param {Map<number, Array<{ hour: number, question_number: number, text: string, updated_at: string }>>} byHour
+ * @param {number[]} hoursSorted - Hour keys in display order.
+ */
+function renderQuestionLogHourSections(byHour, hoursSorted) {
   for (const h of hoursSorted) {
     const section = document.createElement("section");
     section.className = "question-log-hour";
+    section.id = "question-log-hour-" + h;
+    section.setAttribute("data-hour", String(h));
 
     const title = document.createElement("h3");
     title.className = "question-log-hour-title";
@@ -302,7 +412,9 @@ function renderQuestionLog(questions) {
     section.appendChild(title);
 
     const list = byHour.get(h).slice();
-    list.sort((a, b) => a.question_number - b.question_number);
+    list.sort(function (a, b) {
+      return a.question_number - b.question_number;
+    });
     for (const item of list) {
       const row = document.createElement("div");
       row.className = "question-log-item";
@@ -333,13 +445,154 @@ function renderQuestionLog(questions) {
 }
 
 /**
+ * Renders the cached log for the current page (fixed hour window 1..56).
+ */
+function renderQuestionLogView() {
+  const hpp = getQuestionLogHoursPerPage();
+  questionLogHoursPerPage = hpp;
+  clampQuestionLogPageIndex();
+  updateQuestionLogToolbar();
+
+  questionLogEl.innerHTML = "";
+  const questions = questionLogCachedQuestions;
+  if (!questions || questions.length === 0) {
+    const p = document.createElement("p");
+    p.className = "question-log-empty";
+    p.textContent =
+      "No questions saved yet. Set hour and Q#, add text, then click “Save to shared log”.";
+    questionLogEl.appendChild(p);
+    return;
+  }
+
+  const range = questionLogHourRangeForPage(questionLogPageIndex, hpp);
+  const byHour = new Map();
+  for (const q of questions) {
+    const h = Number(q.hour);
+    if (!Number.isFinite(h) || h < range.start || h > range.end) continue;
+    if (!byHour.has(h)) byHour.set(h, []);
+    byHour.get(h).push(q);
+  }
+
+  const hoursSorted = [...byHour.keys()].sort(function (a, b) {
+    return a - b;
+  });
+
+  if (hoursSorted.length === 0) {
+    const p = document.createElement("p");
+    p.className = "question-log-empty question-log-empty-page";
+    p.textContent =
+      "No questions saved for hours " +
+      range.start +
+      "–" +
+      range.end +
+      " yet.";
+    questionLogEl.appendChild(p);
+    return;
+  }
+
+  renderQuestionLogHourSections(byHour, hoursSorted);
+  if (questionLogEl) {
+    questionLogEl.scrollTop = 0;
+  }
+}
+
+/**
+ * After {@link questionLogHoursPerPage} changes, keeps the first hour of the
+ * previous window visible when possible.
+ */
+function onQuestionLogHoursPerPageChange() {
+  const oldHpp = sanitizeQuestionLogHoursPerPage(questionLogHoursPerPage);
+  const newHpp = getQuestionLogHoursPerPage();
+  const prevStart = questionLogHourRangeForPage(
+    questionLogPageIndex,
+    oldHpp
+  ).start;
+  questionLogHoursPerPage = newHpp;
+  questionLogPageIndex = questionLogPageForHour(prevStart, newHpp);
+  clampQuestionLogPageIndex();
+  renderQuestionLogView();
+}
+
+/**
+ * Navigates one page forward or backward within the fixed hour span.
+ *
+ * @param {number} delta - -1 or +1.
+ */
+function shiftQuestionLogPage(delta) {
+  questionLogPageIndex += delta;
+  clampQuestionLogPageIndex();
+  renderQuestionLogView();
+}
+
+/**
+ * Scrolls a question-log hour block into view inside the log panel (not the window).
+ *
+ * @param {number} hour - Hour whose section to show.
+ */
+function scrollQuestionLogHourIntoView(hour) {
+  const block = document.getElementById("question-log-hour-" + hour);
+  const log = document.getElementById("questionLog");
+  if (!block || !log) return;
+  const logRect = log.getBoundingClientRect();
+  const blockRect = block.getBoundingClientRect();
+  const targetScrollTop =
+    log.scrollTop + (blockRect.top - logRect.top) - 6;
+  log.scrollTo({
+    top: Math.max(0, targetScrollTop),
+    behavior: "smooth",
+  });
+}
+
+/**
+ * Jumps to the page containing the given hour and scrolls that hour section into view if present.
+ *
+ * @param {number} hour - Target hour (1..QUESTION_LOG_MAX_HOUR).
+ * @returns {boolean} False if hour is out of range.
+ */
+function jumpQuestionLogToHour(hour) {
+  if (
+    !Number.isFinite(hour) ||
+    hour < 1 ||
+    hour > QUESTION_LOG_MAX_HOUR
+  ) {
+    return false;
+  }
+  questionLogPageIndex = questionLogPageForHour(hour, getQuestionLogHoursPerPage());
+  renderQuestionLogView();
+  window.requestAnimationFrame(function () {
+    window.requestAnimationFrame(function () {
+      scrollQuestionLogHourIntoView(hour);
+    });
+  });
+  return true;
+}
+
+/**
+ * Reads "Go to hour" input and jumps.
+ */
+function handleQuestionLogGoHour() {
+  const jumpInput = document.getElementById("questionLogJumpHour");
+  if (!jumpInput) return;
+  const raw = String(jumpInput.value ?? "").trim();
+  const hour = parseInt(raw, 10);
+  if (!jumpQuestionLogToHour(hour)) {
+    jumpInput.focus();
+    return;
+  }
+  jumpInput.value = "";
+}
+
+/**
  * Fetches the current question list from the API and re-renders the panel.
  */
 async function refreshQuestionLog() {
   const res = await fetch(apiUrl("/api/questions"));
   if (!res.ok) return;
   const data = await res.json();
-  renderQuestionLog(data.questions);
+  questionLogCachedQuestions = data.questions || [];
+  questionLogHoursPerPage = getQuestionLogHoursPerPage();
+  clampQuestionLogPageIndex();
+  renderQuestionLogView();
 }
 
 /**
@@ -371,7 +624,7 @@ async function handleSaveToSharedLog() {
   const parsed = parseHourAndQuestionNumber();
   if (!parsed) {
     setCaptureFeedback(
-      "Enter a valid Hour and Question # (both at least 1) before saving.",
+      "Enter a valid Hour (1–56) and Question # (at least 1) before saving.",
       "error"
     );
     return;
@@ -598,8 +851,40 @@ async function handleStop() {
 // ── Initialise ───────────────────────────────────────────────────────────────
 
 fetchSessionConfig();
+
+questionLogHoursPerPage = getQuestionLogHoursPerPage();
+
 refreshQuestionLog().catch(function () {});
 startQuestionLogPolling();
+
+if (questionLogHoursPerPageEl) {
+  questionLogHoursPerPageEl.addEventListener(
+    "change",
+    onQuestionLogHoursPerPageChange
+  );
+}
+if (questionLogPrevEl) {
+  questionLogPrevEl.addEventListener("click", function () {
+    shiftQuestionLogPage(-1);
+  });
+}
+if (questionLogNextEl) {
+  questionLogNextEl.addEventListener("click", function () {
+    shiftQuestionLogPage(1);
+  });
+}
+if (questionLogGoHourEl) {
+  questionLogGoHourEl.addEventListener("click", handleQuestionLogGoHour);
+}
+if (questionLogJumpHourEl) {
+  questionLogJumpHourEl.addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      handleQuestionLogGoHour();
+    }
+  });
+}
+
 btnStart.addEventListener("click", handleStart);
 btnStop.addEventListener("click", handleStop);
 btnUseSelection.addEventListener("click", handleUseSelectionAsQuestion);

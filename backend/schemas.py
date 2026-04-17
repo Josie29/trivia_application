@@ -96,7 +96,7 @@ class QuestionLogListResponse(BaseModel):
 class UpsertQuestionRequest(BaseModel):
     """Body for POST /api/questions."""
 
-    hour: int = Field(ge=1)
+    hour: int = Field(ge=1, le=56, description="Trivia hour up to 56")
     question_number: int = Field(ge=1)
     text: str = Field(min_length=1)
 

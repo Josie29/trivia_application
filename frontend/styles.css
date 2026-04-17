@@ -517,6 +517,71 @@ button.is-loading::before {
   margin-bottom: 0.85rem;
 }
 
+.question-log-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.8rem;
+}
+
+.question-log-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+}
+
+.question-log-toolbar-label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.question-log-select {
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.question-log-nav {
+  font: inherit;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.question-log-nav:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.question-log-nav:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.question-log-page-meta {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.question-log-jump-input {
+  font: inherit;
+  width: 4.5rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
 .question-log {
   border: 1.5px solid var(--color-border);
   border-radius: 8px;
@@ -534,6 +599,10 @@ button.is-loading::before {
   color: var(--color-text-muted);
   font-style: italic;
   font-size: 0.85rem;
+}
+
+.question-log-empty-page {
+  font-style: normal;
 }
 
 .question-log-hour {
