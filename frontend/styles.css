@@ -674,10 +674,53 @@ button.is-loading::before {
 }
 
 .question-log-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--color-text-muted);
   margin-bottom: 0.2rem;
+}
+
+.question-log-meta-label {
+  flex: 0 0 auto;
+}
+
+.question-log-copy-button {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.question-log-copy-button:hover {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+}
+
+.question-log-copy-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.question-log-copy-button.is-copied {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-bg));
+}
+
+.question-log-copy-button.is-copy-failed {
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
 .question-log-body {
