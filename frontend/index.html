@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trivia AI — Live Stream Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=8" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
 
@@ -13,7 +13,7 @@
     <p>Connect to a live Twitch channel or HTTP audio stream (e.g. contest radio) and watch AI transcribe and extract trivia questions in real time.</p>
   </header>
 
-  <div class="feature-pills">
+  <div class="feature-pills" aria-hidden="true">
     <span class="pill">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="white"/></svg>
       Live audio capture
@@ -28,6 +28,7 @@
     </span>
   </div>
 
+  <main class="site-main" id="main">
   <div class="main-layout">
     <div class="card card-stream">
       <label for="twitchUrl">Stream URL</label>
@@ -63,16 +64,16 @@
       </div>
 
       <div class="transcript-header">
-        <span class="transcript-label">Live Transcript</span>
+        <h2 class="transcript-label" id="transcript-heading">Live transcript</h2>
       </div>
-      <div id="transcript" aria-label="Live transcription output" tabindex="0"></div>
+      <div id="transcript" aria-labelledby="transcript-heading" tabindex="0"></div>
 
       <section class="question-capture" aria-labelledby="question-capture-heading">
         <div class="transcript-header">
-          <span class="transcript-label" id="question-capture-heading">Captured question</span>
+          <h2 class="transcript-label" id="question-capture-heading">Captured question</h2>
         </div>
         <p class="capture-hint">
-          Highlight text in the live transcript, then use the button below to move it here for editing.
+          Highlight text in the live transcript, then use <strong>Use selection as question</strong> to copy it here for editing.
         </p>
         <div class="question-meta-row">
           <div class="field-inline">
@@ -96,13 +97,13 @@
 
     <section class="card card-question-log" aria-labelledby="question-log-heading">
       <div class="transcript-header">
-        <span class="transcript-label" id="question-log-heading">Shared question log</span>
+        <h2 class="transcript-label" id="question-log-heading">Shared question log</h2>
       </div>
       <p class="capture-hint card-question-log-hint">
-        Saved questions are stored on the server so everyone using this app sees the same list.
-        Questions are grouped by hour; within each hour they are ordered by question number.
-        Choose which <strong>hour</strong> to show below (one hour at a time).
-        Use <strong>Add scoring</strong> or <strong>Edit scoring</strong> on each question to enter answers and points. The list stays compact until you open the editor; after saving, a short summary shows your scoring.
+        <strong>Same list for everyone.</strong> Pick one contest hour (1–56); questions are ordered by number within that hour.
+      </p>
+      <p class="capture-hint capture-hint-secondary">
+        Use <strong>Add scoring</strong> or <strong>Edit scoring</strong> for points and answer check. The editor stays tucked away until you open it; the <strong>running point total</strong> is at the bottom.
       </p>
       <div class="question-log-toolbar" aria-label="Choose trivia hour">
         <div class="question-log-toolbar-row question-log-toolbar-hour-row">
@@ -118,8 +119,9 @@
       </footer>
     </section>
   </div>
+  </main>
 
-  <script src="config.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="config.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
