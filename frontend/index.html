@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trivia AI — Live Stream Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=8" />
 </head>
 <body>
 
@@ -101,32 +101,25 @@
       <p class="capture-hint card-question-log-hint">
         Saved questions are stored on the server so everyone using this app sees the same list.
         Questions are grouped by hour; within each hour they are ordered by question number.
-        Use the controls below to page through hours (1–56) or jump to a specific hour.
+        Choose which <strong>hour</strong> to show below (one hour at a time).
+        Use <strong>Add scoring</strong> or <strong>Edit scoring</strong> on each question to enter answers and points. The list stays compact until you open the editor; after saving, a short summary shows your scoring.
       </p>
-      <div class="question-log-toolbar" aria-label="Question log pagination">
-        <div class="question-log-toolbar-row">
-          <label class="question-log-toolbar-label" for="questionLogHoursPerPage">Hours per page</label>
-          <select id="questionLogHoursPerPage" class="question-log-select">
-            <option value="4">4</option>
-            <option value="6">6</option>
-            <option value="8" selected>8</option>
-            <option value="14">14</option>
-          </select>
-          <button type="button" id="questionLogPrev" class="question-log-nav">Previous</button>
-          <button type="button" id="questionLogNext" class="question-log-nav">Next</button>
-          <span id="questionLogPageMeta" class="question-log-page-meta" aria-live="polite"></span>
-        </div>
-        <div class="question-log-toolbar-row">
-          <label class="question-log-toolbar-label" for="questionLogJumpHour">Go to hour</label>
-          <input id="questionLogJumpHour" class="question-log-jump-input" type="number" inputmode="numeric" min="1" max="56" placeholder="1–56" autocomplete="off" />
-          <button type="button" id="questionLogGoHour" class="question-log-nav">Go</button>
+      <div class="question-log-toolbar" aria-label="Choose trivia hour">
+        <div class="question-log-toolbar-row question-log-toolbar-hour-row">
+          <label class="question-log-toolbar-label" for="questionLogHourSelect">Show hour</label>
+          <select id="questionLogHourSelect" class="question-log-hour-select" aria-describedby="question-log-hour-help"></select>
+          <span id="question-log-hour-help" class="question-log-hour-help">Contest hours 1–56</span>
         </div>
       </div>
       <div id="questionLog" class="question-log" role="region" aria-label="Saved questions for all viewers"></div>
+      <footer class="question-log-total-footer" aria-label="Contest points total">
+        <span class="question-log-total-label">Running point total</span>
+        <span id="questionLogPointTotal" class="question-log-point-total" aria-live="polite">0</span>
+      </footer>
     </section>
   </div>
 
-  <script src="config.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="config.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

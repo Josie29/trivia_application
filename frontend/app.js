@@ -44,15 +44,13 @@ const questionTextEl     = document.getElementById("questionText");
 const btnUseSelection    = document.getElementById("btnUseSelection");
 const btnSaveToLog       = document.getElementById("btnSaveToLog");
 const captureFeedbackEl  = document.getElementById("captureFeedback");
-const questionLogEl      = document.getElementById("questionLog");
-const questionLogHoursPerPageEl = document.getElementById(
-  "questionLogHoursPerPage"
+const questionLogEl = document.getElementById("questionLog");
+const questionLogHourSelectEl = document.getElementById(
+  "questionLogHourSelect"
 );
-const questionLogPrevEl  = document.getElementById("questionLogPrev");
-const questionLogNextEl  = document.getElementById("questionLogNext");
-const questionLogPageMetaEl = document.getElementById("questionLogPageMeta");
-const questionLogJumpHourEl = document.getElementById("questionLogJumpHour");
-const questionLogGoHourEl = document.getElementById("questionLogGoHour");
+const questionLogPointTotalEl = document.getElementById(
+  "questionLogPointTotal"
+);
 
 // ── Status bar ───────────────────────────────────────────────────────────────
 
@@ -260,49 +258,125 @@ function handleUseSelectionAsQuestion() {
 /** Maximum trivia hour supported in the UI and API (long contests). */
 const QUESTION_LOG_MAX_HOUR = 56;
 
-/**
- * Largest "Hours per page" value in the toolbar (must not use {@link QUESTION_LOG_MAX_HOUR} here:
- * capping page size at 56 makes a single page span every hour, so "pagination" disappears).
- */
-const QUESTION_LOG_MAX_HOURS_PER_PAGE = 14;
-
 /** @type {ReturnType<typeof setInterval> | null} */
 let questionLogPollTimer = null;
 
-/** @type {Array<{ hour: number, question_number: number, text: string, updated_at: string }>} */
+/** @type {Array<{ hour: number, question_number: number, text: string, updated_at: string, our_answer?: string, actual_answer?: string, point_value?: number, got_correct?: boolean }>} */
 let questionLogCachedQuestions = [];
 
-/** @type {number} */
-let questionLogPageIndex = 0;
-
-/** @type {number} */
-let questionLogHoursPerPage = 8;
+/**
+ * Currently selected contest hour shown in the shared log (1..{@link QUESTION_LOG_MAX_HOUR}).
+ *
+ * @type {number}
+ */
+let questionLogSelectedHour = 1;
 
 /**
- * Normalizes hours-per-page so range math never sees NaN (which would show every hour).
+ * Hour index of the last completed paint; used with {@link questionLogSelectedHour} to preserve scroll across poll refreshes.
  *
- * @param {number} n - Raw numeric value (may be NaN).
- * @returns {number}
+ * @type {number | null}
  */
-function sanitizeQuestionLogHoursPerPage(n) {
-  if (!Number.isFinite(n) || n < 1) {
-    return 8;
+let questionLogLastRenderedHour = null;
+
+/**
+ * When true, the user has typed in scoring fields; polling must not call
+ * {@link renderQuestionLogView} or in-progress text is wiped (inputs are recreated from API data).
+ *
+ * @type {boolean}
+ */
+let questionLogScoringDirty = false;
+
+/**
+ * Returns true if any Add/Edit scoring panel is currently expanded (not [hidden]).
+ * Used with {@link questionLogScoringDirty} so polling does not reset the UI while the editor is open.
+ *
+ * @returns {boolean}
+ */
+function isQuestionLogScoringEditorOpen() {
+  const log = document.getElementById("questionLog");
+  if (!log) {
+    return false;
   }
-  return Math.min(Math.floor(n), QUESTION_LOG_MAX_HOURS_PER_PAGE);
+  const panels = log.querySelectorAll(".question-log-score-edit");
+  for (let i = 0; i < panels.length; i += 1) {
+    if (!panels[i].hidden) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
- * Reads the Hours per page control; falls back to 8 when missing or invalid.
+ * Updates the running sum of ``point_value`` across all saved questions in the shared log.
+ */
+function updateQuestionLogPointTotal() {
+  if (!questionLogPointTotalEl) {
+    return;
+  }
+  let sum = 0;
+  const qs = questionLogCachedQuestions || [];
+  for (let i = 0; i < qs.length; i += 1) {
+    const pv = Number(qs[i].point_value);
+    if (Number.isFinite(pv) && pv > 0) {
+      sum += Math.floor(pv);
+    }
+  }
+  questionLogPointTotalEl.textContent = String(sum);
+}
+
+/**
+ * Clamps hour to the supported contest range.
+ *
+ * @param {number} n - Raw hour value.
+ * @returns {number}
+ */
+function sanitizeQuestionLogSelectedHour(n) {
+  if (!Number.isFinite(n) || n < 1) {
+    return 1;
+  }
+  return Math.min(Math.floor(n), QUESTION_LOG_MAX_HOUR);
+}
+
+/**
+ * Reads the Show hour control, or falls back to {@link questionLogSelectedHour}.
  *
  * @returns {number}
  */
-function getQuestionLogHoursPerPage() {
-  const el = document.getElementById("questionLogHoursPerPage");
-  if (!el) {
-    return sanitizeQuestionLogHoursPerPage(questionLogHoursPerPage);
+function getQuestionLogSelectedHour() {
+  if (!questionLogHourSelectEl) {
+    return sanitizeQuestionLogSelectedHour(questionLogSelectedHour);
   }
-  const raw = parseInt(String(el.value).trim(), 10);
-  return sanitizeQuestionLogHoursPerPage(raw);
+  const raw = parseInt(String(questionLogHourSelectEl.value).trim(), 10);
+  return sanitizeQuestionLogSelectedHour(raw);
+}
+
+/**
+ * Fills the hour dropdown with Hour 1 … Hour 56 when empty.
+ */
+function ensureQuestionLogHourSelectOptions() {
+  const sel = questionLogHourSelectEl || document.getElementById(
+    "questionLogHourSelect"
+  );
+  if (!sel || sel.options.length >= QUESTION_LOG_MAX_HOUR) {
+    return;
+  }
+  sel.innerHTML = "";
+  for (let h = 1; h <= QUESTION_LOG_MAX_HOUR; h += 1) {
+    const opt = document.createElement("option");
+    opt.value = String(h);
+    opt.textContent = "Hour " + h;
+    sel.appendChild(opt);
+  }
+}
+
+/**
+ * Syncs the select element with {@link questionLogSelectedHour}.
+ */
+function syncQuestionLogHourSelectValue() {
+  if (!questionLogHourSelectEl) return;
+  questionLogHourSelectEl.value = String(
+    sanitizeQuestionLogSelectedHour(questionLogSelectedHour)
+  );
 }
 
 /**
@@ -324,79 +398,357 @@ function parseHourAndQuestionNumber() {
 }
 
 /**
- * Returns inclusive hour range [start, end] for a zero-based page index.
+ * Preview of server rule: both answers non-empty and equal case-insensitively after trim.
  *
- * @param {number} pageIndex - Zero-based page.
- * @param {number} hoursPerPage - Hours shown per page (>= 1).
- * @returns {{ start: number, end: number }}
+ * @param {string} ourText
+ * @param {string} actualText
+ * @returns {boolean | null} True/false when comparable; null when either side empty.
  */
-function questionLogHourRangeForPage(pageIndex, hoursPerPage) {
-  const start = pageIndex * hoursPerPage + 1;
-  const end = Math.min(QUESTION_LOG_MAX_HOUR, start + hoursPerPage - 1);
-  return { start, end };
+function computeGotCorrectPreview(ourText, actualText) {
+  const o = String(ourText ?? "").trim().toLowerCase();
+  const a = String(actualText ?? "").trim().toLowerCase();
+  if (!o || !a) {
+    return null;
+  }
+  return o === a;
 }
 
 /**
- * Total pages when slicing the fixed hour span 1..QUESTION_LOG_MAX_HOUR.
+ * Updates the scoring status chip for one row.
  *
- * @param {number} hoursPerPage - Hours per page (>= 1).
- * @returns {number}
+ * @param {HTMLElement} badgeEl
+ * @param {string} ourText
+ * @param {string} actualText
  */
-function questionLogTotalPages(hoursPerPage) {
-  return Math.max(1, Math.ceil(QUESTION_LOG_MAX_HOUR / hoursPerPage));
+function updateQuestionLogScoreBadge(badgeEl, ourText, actualText) {
+  const r = computeGotCorrectPreview(ourText, actualText);
+  badgeEl.className = "question-log-result";
+  if (r === null) {
+    badgeEl.classList.add("is-pending");
+    badgeEl.textContent = "Awaiting both answers";
+  } else if (r) {
+    badgeEl.classList.add("is-correct");
+    badgeEl.textContent = "Correct";
+  } else {
+    badgeEl.classList.add("is-incorrect");
+    badgeEl.textContent = "Incorrect";
+  }
 }
 
 /**
- * Zero-based page index that contains the given hour.
+ * Persists scoring fields for one log row (full POST with question text).
  *
- * @param {number} hour - Hour in 1..QUESTION_LOG_MAX_HOUR.
- * @param {number} hoursPerPage
- * @returns {number}
+ * @param {{ hour: number, question_number: number, text: string }} item - Row snapshot including wording.
+ * @param {string} ourAnswer
+ * @param {string} actualAnswer
+ * @param {number} pointValue
+ * @param {HTMLButtonElement} btn - Save button (disabled while sending).
  */
-function questionLogPageForHour(hour, hoursPerPage) {
-  return Math.floor((hour - 1) / hoursPerPage);
+async function saveQuestionLogScoring(item, ourAnswer, actualAnswer, pointValue, btn) {
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    const res = await fetch(apiUrl("/api/questions"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hour: item.hour,
+        question_number: item.question_number,
+        text: item.text,
+        our_answer: ourAnswer,
+        actual_answer: actualAnswer,
+        point_value: pointValue,
+      }),
+    });
+    if (!res.ok) {
+      const detail = parseErrorDetail(await res.text());
+      window.alert("Could not save scoring: " + detail);
+      return;
+    }
+    questionLogScoringDirty = false;
+    await refreshQuestionLog({ forceRender: true });
+  } catch (err) {
+    window.alert("Network error: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
 }
 
 /**
- * Clamps {@link questionLogPageIndex} to valid pages for the current hours-per-page.
+ * Returns true when the row has any scoring data worth showing in the summary strip.
+ *
+ * @param {{ our_answer?: string, actual_answer?: string, point_value?: number }} item
+ * @returns {boolean}
  */
-function clampQuestionLogPageIndex() {
-  const hpp = getQuestionLogHoursPerPage();
-  const maxIdx = questionLogTotalPages(hpp) - 1;
-  if (questionLogPageIndex > maxIdx) questionLogPageIndex = maxIdx;
-  if (questionLogPageIndex < 0) questionLogPageIndex = 0;
+function hasQuestionLogScoringSaved(item) {
+  const our = String(item.our_answer ?? "").trim();
+  const act = String(item.actual_answer ?? "").trim();
+  const pts = Number(item.point_value ?? 0);
+  return our.length > 0 || act.length > 0 || (Number.isFinite(pts) && pts > 0);
 }
 
 /**
- * Updates pagination labels and Previous/Next disabled state.
+ * Fills the read-only summary strip for saved scoring (compact layout).
+ *
+ * @param {HTMLElement} container
+ * @param {{ our_answer?: string, actual_answer?: string, point_value?: number, got_correct?: boolean }} item
  */
-function updateQuestionLogToolbar() {
-  const hpp = getQuestionLogHoursPerPage();
-  const total = questionLogTotalPages(hpp);
-  const range = questionLogHourRangeForPage(questionLogPageIndex, hpp);
-  if (questionLogPageMetaEl) {
-    questionLogPageMetaEl.textContent =
-      "Page " +
-      (questionLogPageIndex + 1) +
-      " of " +
-      total +
-      " · Hours " +
-      range.start +
-      "–" +
-      range.end;
+function fillQuestionLogScoringSummary(container, item) {
+  container.innerHTML = "";
+  const our = String(item.our_answer ?? "").trim();
+  const act = String(item.actual_answer ?? "").trim();
+  const ptsRaw = Number(item.point_value ?? 0);
+  const pts = Number.isFinite(ptsRaw) ? Math.max(0, Math.floor(ptsRaw)) : 0;
+
+  function addLine(label, value) {
+    const line = document.createElement("div");
+    line.className = "question-log-sum-line";
+    const lb = document.createElement("span");
+    lb.className = "question-log-sum-label";
+    lb.textContent = label;
+    const val = document.createElement("span");
+    val.className = "question-log-sum-value";
+    val.textContent = value || "—";
+    line.appendChild(lb);
+    line.appendChild(val);
+    container.appendChild(line);
   }
-  if (questionLogPrevEl) {
-    questionLogPrevEl.disabled = questionLogPageIndex <= 0;
+
+  addLine("Our answer", our);
+  addLine("Actual answer", act);
+
+  const meta = document.createElement("div");
+  meta.className = "question-log-sum-meta";
+  const ptsSpan = document.createElement("span");
+  ptsSpan.className = "question-log-sum-pts";
+  ptsSpan.textContent = pts === 1 ? "1 point" : pts + " points";
+
+  const badge = document.createElement("span");
+  badge.className = "question-log-result question-log-sum-result";
+  if (item.got_correct === true) {
+    badge.classList.add("is-correct");
+    badge.textContent = "Correct";
+  } else if (our && act) {
+    badge.classList.add("is-incorrect");
+    badge.textContent = "Incorrect";
+  } else {
+    badge.classList.add("is-pending");
+    badge.textContent = "Incomplete";
   }
-  if (questionLogNextEl) {
-    questionLogNextEl.disabled = questionLogPageIndex >= total - 1;
+  meta.appendChild(ptsSpan);
+  meta.appendChild(badge);
+  container.appendChild(meta);
+}
+
+/**
+ * Builds the DOM for one saved question: compact scoring summary + toggle to edit form.
+ *
+ * @param {{ hour: number, question_number: number, text: string, updated_at?: string, our_answer?: string, actual_answer?: string, point_value?: number, got_correct?: boolean }} item
+ * @returns {HTMLDivElement}
+ */
+function buildQuestionLogItemElement(item) {
+  const row = document.createElement("div");
+  row.className = "question-log-item";
+
+  const hour = item.hour;
+  const qn = item.question_number;
+  const baseId = "qlog-" + hour + "-" + qn;
+
+  const meta = document.createElement("div");
+  meta.className = "question-log-meta";
+  meta.textContent = "Q" + qn;
+
+  const body = document.createElement("div");
+  body.className = "question-log-body";
+  body.textContent = item.text;
+
+  const scoreWrap = document.createElement("div");
+  scoreWrap.className = "question-log-score";
+  scoreWrap.setAttribute("role", "group");
+  scoreWrap.setAttribute("aria-label", "Scoring for Q" + qn);
+
+  const bar = document.createElement("div");
+  bar.className = "question-log-score-bar";
+
+  const summary = document.createElement("div");
+  summary.className = "question-log-score-summary";
+
+  if (hasQuestionLogScoringSaved(item)) {
+    fillQuestionLogScoringSummary(summary, item);
+  } else {
+    const hint = document.createElement("p");
+    hint.className = "question-log-score-hint";
+    hint.textContent = "No scoring recorded yet.";
+    summary.appendChild(hint);
   }
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.className = "question-log-toggle-scoring";
+  toggleBtn.setAttribute("aria-expanded", "false");
+  const editPanelId = baseId + "-edit";
+  toggleBtn.setAttribute("aria-controls", editPanelId);
+  toggleBtn.textContent = hasQuestionLogScoringSaved(item)
+    ? "Edit scoring"
+    : "Add scoring";
+
+  const editPanel = document.createElement("div");
+  editPanel.id = editPanelId;
+  editPanel.className = "question-log-score-edit";
+  editPanel.hidden = true;
+  editPanel.setAttribute("role", "region");
+  editPanel.setAttribute(
+    "aria-label",
+    "Edit scoring for question " + qn
+  );
+
+  const grid = document.createElement("div");
+  grid.className = "question-log-score-grid";
+
+  const ourWrap = document.createElement("div");
+  ourWrap.className = "question-log-field";
+  const ourLabel = document.createElement("label");
+  ourLabel.className = "question-log-field-label";
+  ourLabel.htmlFor = baseId + "-our";
+  ourLabel.textContent = "Our answer";
+  const ourInput = document.createElement("textarea");
+  ourInput.className = "question-log-text-input";
+  ourInput.id = baseId + "-our";
+  ourInput.rows = 2;
+  ourInput.value = String(item.our_answer ?? "");
+
+  const actWrap = document.createElement("div");
+  actWrap.className = "question-log-field";
+  const actLabel = document.createElement("label");
+  actLabel.className = "question-log-field-label";
+  actLabel.htmlFor = baseId + "-actual";
+  actLabel.textContent = "Actual answer";
+  const actualInput = document.createElement("textarea");
+  actualInput.className = "question-log-text-input";
+  actualInput.id = baseId + "-actual";
+  actualInput.rows = 2;
+  actualInput.value = String(item.actual_answer ?? "");
+
+  const ptsWrap = document.createElement("div");
+  ptsWrap.className = "question-log-field question-log-field-points";
+  const ptsLabel = document.createElement("label");
+  ptsLabel.className = "question-log-field-label";
+  ptsLabel.htmlFor = baseId + "-pts";
+  ptsLabel.textContent = "Points";
+  const ptsInput = document.createElement("input");
+  ptsInput.type = "number";
+  ptsInput.className = "question-log-points-input";
+  ptsInput.id = baseId + "-pts";
+  ptsInput.min = "0";
+  ptsInput.step = "1";
+  ptsInput.inputMode = "numeric";
+  ptsInput.value = String(
+    item.point_value !== undefined && item.point_value !== null
+      ? item.point_value
+      : 0
+  );
+
+  ourWrap.appendChild(ourLabel);
+  ourWrap.appendChild(ourInput);
+  actWrap.appendChild(actLabel);
+  actWrap.appendChild(actualInput);
+  ptsWrap.appendChild(ptsLabel);
+  ptsWrap.appendChild(ptsInput);
+
+  grid.appendChild(ourWrap);
+  grid.appendChild(actWrap);
+  grid.appendChild(ptsWrap);
+
+  const footer = document.createElement("div");
+  footer.className = "question-log-score-footer";
+
+  const badge = document.createElement("span");
+  badge.className = "question-log-result";
+  updateQuestionLogScoreBadge(badge, ourInput.value, actualInput.value);
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "question-log-save-scoring";
+  saveBtn.textContent = "Save scoring";
+
+  function syncBadge() {
+    updateQuestionLogScoreBadge(badge, ourInput.value, actualInput.value);
+  }
+
+  ourInput.addEventListener("input", syncBadge);
+  actualInput.addEventListener("input", syncBadge);
+
+  const snapshot = {
+    hour: item.hour,
+    question_number: item.question_number,
+    text: item.text,
+  };
+
+  saveBtn.addEventListener("click", function () {
+    const pts = parseInt(String(ptsInput.value ?? "0"), 10);
+    const pv = Number.isFinite(pts) && pts >= 0 ? pts : 0;
+    saveQuestionLogScoring(
+      snapshot,
+      ourInput.value,
+      actualInput.value,
+      pv,
+      saveBtn
+    );
+  });
+
+  footer.appendChild(badge);
+  footer.appendChild(saveBtn);
+
+  editPanel.appendChild(grid);
+  editPanel.appendChild(footer);
+
+  toggleBtn.addEventListener("click", function () {
+    const willOpen = editPanel.hidden;
+    editPanel.hidden = !willOpen;
+    toggleBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    toggleBtn.textContent = willOpen ? "Close editor" : hasQuestionLogScoringSaved(item)
+      ? "Edit scoring"
+      : "Add scoring";
+    if (willOpen && ourInput) {
+      window.setTimeout(function () {
+        ourInput.focus();
+      }, 0);
+    }
+    if (!willOpen) {
+      window.setTimeout(function () {
+        if (!questionLogScoringDirty) {
+          refreshQuestionLog().catch(function () {});
+        }
+      }, 0);
+    }
+  });
+
+  bar.appendChild(summary);
+  bar.appendChild(toggleBtn);
+
+  scoreWrap.appendChild(bar);
+  scoreWrap.appendChild(editPanel);
+
+  row.appendChild(meta);
+  row.appendChild(body);
+  row.appendChild(scoreWrap);
+
+  if (item.updated_at) {
+    const ts = document.createElement("div");
+    ts.className = "question-log-updated";
+    ts.textContent = "Updated " + item.updated_at;
+    row.appendChild(ts);
+  }
+
+  return row;
 }
 
 /**
  * Appends hour sections for the given hour keys (sorted), using data from {@link byHour}.
  *
- * @param {Map<number, Array<{ hour: number, question_number: number, text: string, updated_at: string }>>} byHour
+ * @param {Map<number, Array<object>>} byHour
  * @param {number[]} hoursSorted - Hour keys in display order.
  */
 function renderQuestionLogHourSections(byHour, hoursSorted) {
@@ -416,28 +768,7 @@ function renderQuestionLogHourSections(byHour, hoursSorted) {
       return a.question_number - b.question_number;
     });
     for (const item of list) {
-      const row = document.createElement("div");
-      row.className = "question-log-item";
-
-      const meta = document.createElement("div");
-      meta.className = "question-log-meta";
-      meta.textContent = "Q" + item.question_number;
-
-      const body = document.createElement("div");
-      body.className = "question-log-body";
-      body.textContent = item.text;
-
-      row.appendChild(meta);
-      row.appendChild(body);
-
-      if (item.updated_at) {
-        const ts = document.createElement("div");
-        ts.className = "question-log-updated";
-        ts.textContent = "Updated " + item.updated_at;
-        row.appendChild(ts);
-      }
-
-      section.appendChild(row);
+      section.appendChild(buildQuestionLogItemElement(item));
     }
 
     questionLogEl.appendChild(section);
@@ -445,15 +776,22 @@ function renderQuestionLogHourSections(byHour, hoursSorted) {
 }
 
 /**
- * Renders the cached log for the current page (fixed hour window 1..56).
+ * Renders the cached log for the selected single hour.
  */
 function renderQuestionLogView() {
-  const hpp = getQuestionLogHoursPerPage();
-  questionLogHoursPerPage = hpp;
-  clampQuestionLogPageIndex();
-  updateQuestionLogToolbar();
+  const selectedHour = getQuestionLogSelectedHour();
+  questionLogSelectedHour = selectedHour;
+
+  const preserveScroll =
+    questionLogLastRenderedHour !== null &&
+    questionLogLastRenderedHour === selectedHour;
+  let scrollTopKeep = 0;
+  if (preserveScroll && questionLogEl) {
+    scrollTopKeep = questionLogEl.scrollTop;
+  }
 
   questionLogEl.innerHTML = "";
+  questionLogScoringDirty = false;
   const questions = questionLogCachedQuestions;
   if (!questions || questions.length === 0) {
     const p = document.createElement("p");
@@ -461,14 +799,14 @@ function renderQuestionLogView() {
     p.textContent =
       "No questions saved yet. Set hour and Q#, add text, then click “Save to shared log”.";
     questionLogEl.appendChild(p);
+    questionLogLastRenderedHour = selectedHour;
     return;
   }
 
-  const range = questionLogHourRangeForPage(questionLogPageIndex, hpp);
   const byHour = new Map();
   for (const q of questions) {
     const h = Number(q.hour);
-    if (!Number.isFinite(h) || h < range.start || h > range.end) continue;
+    if (!Number.isFinite(h) || h !== selectedHour) continue;
     if (!byHour.has(h)) byHour.set(h, []);
     byHour.get(h).push(q);
   }
@@ -481,117 +819,53 @@ function renderQuestionLogView() {
     const p = document.createElement("p");
     p.className = "question-log-empty question-log-empty-page";
     p.textContent =
-      "No questions saved for hours " +
-      range.start +
-      "–" +
-      range.end +
-      " yet.";
+      "No questions saved for Hour " + selectedHour + " yet.";
     questionLogEl.appendChild(p);
+    questionLogLastRenderedHour = selectedHour;
+    if (preserveScroll && questionLogEl) {
+      questionLogEl.scrollTop = scrollTopKeep;
+    }
     return;
   }
 
   renderQuestionLogHourSections(byHour, hoursSorted);
+  questionLogLastRenderedHour = selectedHour;
+  if (preserveScroll && questionLogEl) {
+    questionLogEl.scrollTop = scrollTopKeep;
+  }
+}
+
+/**
+ * User picked a different hour—reset scroll to top for the new list.
+ */
+function onQuestionLogHourSelectChange() {
+  questionLogScoringDirty = false;
+  questionLogSelectedHour = getQuestionLogSelectedHour();
+  questionLogLastRenderedHour = null;
+  renderQuestionLogView();
   if (questionLogEl) {
     questionLogEl.scrollTop = 0;
   }
 }
 
 /**
- * After {@link questionLogHoursPerPage} changes, keeps the first hour of the
- * previous window visible when possible.
- */
-function onQuestionLogHoursPerPageChange() {
-  const oldHpp = sanitizeQuestionLogHoursPerPage(questionLogHoursPerPage);
-  const newHpp = getQuestionLogHoursPerPage();
-  const prevStart = questionLogHourRangeForPage(
-    questionLogPageIndex,
-    oldHpp
-  ).start;
-  questionLogHoursPerPage = newHpp;
-  questionLogPageIndex = questionLogPageForHour(prevStart, newHpp);
-  clampQuestionLogPageIndex();
-  renderQuestionLogView();
-}
-
-/**
- * Navigates one page forward or backward within the fixed hour span.
- *
- * @param {number} delta - -1 or +1.
- */
-function shiftQuestionLogPage(delta) {
-  questionLogPageIndex += delta;
-  clampQuestionLogPageIndex();
-  renderQuestionLogView();
-}
-
-/**
- * Scrolls a question-log hour block into view inside the log panel (not the window).
- *
- * @param {number} hour - Hour whose section to show.
- */
-function scrollQuestionLogHourIntoView(hour) {
-  const block = document.getElementById("question-log-hour-" + hour);
-  const log = document.getElementById("questionLog");
-  if (!block || !log) return;
-  const logRect = log.getBoundingClientRect();
-  const blockRect = block.getBoundingClientRect();
-  const targetScrollTop =
-    log.scrollTop + (blockRect.top - logRect.top) - 6;
-  log.scrollTo({
-    top: Math.max(0, targetScrollTop),
-    behavior: "smooth",
-  });
-}
-
-/**
- * Jumps to the page containing the given hour and scrolls that hour section into view if present.
- *
- * @param {number} hour - Target hour (1..QUESTION_LOG_MAX_HOUR).
- * @returns {boolean} False if hour is out of range.
- */
-function jumpQuestionLogToHour(hour) {
-  if (
-    !Number.isFinite(hour) ||
-    hour < 1 ||
-    hour > QUESTION_LOG_MAX_HOUR
-  ) {
-    return false;
-  }
-  questionLogPageIndex = questionLogPageForHour(hour, getQuestionLogHoursPerPage());
-  renderQuestionLogView();
-  window.requestAnimationFrame(function () {
-    window.requestAnimationFrame(function () {
-      scrollQuestionLogHourIntoView(hour);
-    });
-  });
-  return true;
-}
-
-/**
- * Reads "Go to hour" input and jumps.
- */
-function handleQuestionLogGoHour() {
-  const jumpInput = document.getElementById("questionLogJumpHour");
-  if (!jumpInput) return;
-  const raw = String(jumpInput.value ?? "").trim();
-  const hour = parseInt(raw, 10);
-  if (!jumpQuestionLogToHour(hour)) {
-    jumpInput.focus();
-    return;
-  }
-  jumpInput.value = "";
-}
-
-/**
  * Fetches the current question list from the API and re-renders the panel.
+ *
+ * @param {{ forceRender?: boolean }} [options] - Pass ``{ forceRender: true }`` after a save or when the DOM must refresh even if the user has unscored edits (e.g. new capture).
  */
-async function refreshQuestionLog() {
+async function refreshQuestionLog(options) {
+  const forceRender = options && options.forceRender;
   const res = await fetch(apiUrl("/api/questions"));
   if (!res.ok) return;
   const data = await res.json();
   questionLogCachedQuestions = data.questions || [];
-  questionLogHoursPerPage = getQuestionLogHoursPerPage();
-  clampQuestionLogPageIndex();
+  updateQuestionLogPointTotal();
+  if (
+    !forceRender &&
+    (questionLogScoringDirty || isQuestionLogScoringEditorOpen())
+  ) {
+    return;
+  }
   renderQuestionLogView();
 }
 
@@ -682,10 +956,34 @@ async function handleSaveToSharedLog() {
     } else {
       setCaptureFeedback("Saved to shared question log.", "success");
     }
-    await refreshQuestionLog();
+    questionLogSelectedHour = parsed.hour;
+    syncQuestionLogHourSelectValue();
+    await refreshQuestionLog({ forceRender: true });
   } catch (err) {
     setCaptureFeedback("Network error: " + err.message, "error");
   }
+}
+
+/**
+ * Marks scoring fields as dirty when the user types in the scrollable log (so polling will not clobber inputs).
+ */
+function setupQuestionLogScoringDirtyTracking() {
+  const log = document.getElementById("questionLog");
+  if (!log || log.dataset.scoringDirtyBound === "1") {
+    return;
+  }
+  log.dataset.scoringDirtyBound = "1";
+  log.addEventListener("input", function (ev) {
+    const t = ev.target;
+    if (
+      t &&
+      t.classList &&
+      (t.classList.contains("question-log-text-input") ||
+        t.classList.contains("question-log-points-input"))
+    ) {
+      questionLogScoringDirty = true;
+    }
+  });
 }
 
 // ── Progress bar ─────────────────────────────────────────────────────────────
@@ -852,37 +1150,19 @@ async function handleStop() {
 
 fetchSessionConfig();
 
-questionLogHoursPerPage = getQuestionLogHoursPerPage();
+ensureQuestionLogHourSelectOptions();
+syncQuestionLogHourSelectValue();
+questionLogSelectedHour = getQuestionLogSelectedHour();
 
+setupQuestionLogScoringDirtyTracking();
 refreshQuestionLog().catch(function () {});
 startQuestionLogPolling();
 
-if (questionLogHoursPerPageEl) {
-  questionLogHoursPerPageEl.addEventListener(
+if (questionLogHourSelectEl) {
+  questionLogHourSelectEl.addEventListener(
     "change",
-    onQuestionLogHoursPerPageChange
+    onQuestionLogHourSelectChange
   );
-}
-if (questionLogPrevEl) {
-  questionLogPrevEl.addEventListener("click", function () {
-    shiftQuestionLogPage(-1);
-  });
-}
-if (questionLogNextEl) {
-  questionLogNextEl.addEventListener("click", function () {
-    shiftQuestionLogPage(1);
-  });
-}
-if (questionLogGoHourEl) {
-  questionLogGoHourEl.addEventListener("click", handleQuestionLogGoHour);
-}
-if (questionLogJumpHourEl) {
-  questionLogJumpHourEl.addEventListener("keydown", function (ev) {
-    if (ev.key === "Enter") {
-      ev.preventDefault();
-      handleQuestionLogGoHour();
-    }
-  });
 }
 
 btnStart.addEventListener("click", handleStart);

@@ -85,6 +85,13 @@ class LoggedQuestion(BaseModel):
     question_number: int = Field(ge=1, description="Question number within that hour")
     text: str = Field(min_length=1, description="Question wording")
     updated_at: str = Field(description="When this row was last saved (ISO-8601 UTC)")
+    our_answer: str = Field(default="", description="The team's submitted answer")
+    actual_answer: str = Field(default="", description="Correct / official answer")
+    point_value: int = Field(ge=0, default=0, description="Points for this question")
+    got_correct: bool = Field(
+        default=False,
+        description="True when both answers are present and match (case-insensitive, trimmed)",
+    )
 
 
 class QuestionLogListResponse(BaseModel):
@@ -99,6 +106,19 @@ class UpsertQuestionRequest(BaseModel):
     hour: int = Field(ge=1, le=56, description="Trivia hour up to 56")
     question_number: int = Field(ge=1)
     text: str = Field(min_length=1)
+    our_answer: str | None = Field(
+        default=None,
+        description="Omit to keep existing when updating; empty string clears",
+    )
+    actual_answer: str | None = Field(
+        default=None,
+        description="Omit to keep existing when updating; empty string clears",
+    )
+    point_value: int | None = Field(
+        default=None,
+        ge=0,
+        description="Omit to keep existing points when updating",
+    )
 
     @field_validator("text")
     @classmethod
