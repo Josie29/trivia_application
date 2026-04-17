@@ -550,6 +550,61 @@ function fillQuestionLogScoringSummary(container, item) {
 }
 
 /**
+ * Copies ``text`` to the system clipboard using the async Clipboard API, falling back to
+ * a hidden ``<textarea>`` + ``document.execCommand("copy")`` when the async API is unavailable
+ * (older browsers, insecure contexts).
+ *
+ * @param {string} text - Text to place on the clipboard.
+ * @returns {Promise<boolean>} True on success, false otherwise.
+ */
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      // Fall through to legacy path below.
+    }
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Handles a click on a per-row Copy button: writes the question text to the clipboard
+ * and flips the button label briefly to confirm (or report failure).
+ *
+ * @param {HTMLButtonElement} btn - The clicked button; its label is temporarily replaced.
+ * @param {string} text - Question text to copy.
+ */
+async function handleCopyQuestionText(btn, text) {
+  const ok = await copyTextToClipboard(text);
+  const prevLabel = btn.dataset.defaultLabel || btn.textContent;
+  btn.dataset.defaultLabel = prevLabel;
+  btn.textContent = ok ? "Copied" : "Copy failed";
+  btn.classList.toggle("is-copied", ok);
+  btn.classList.toggle("is-copy-failed", !ok);
+  window.setTimeout(function () {
+    btn.textContent = prevLabel;
+    btn.classList.remove("is-copied");
+    btn.classList.remove("is-copy-failed");
+  }, 1500);
+}
+
+/**
  * Builds the DOM for one saved question: compact scoring summary + toggle to edit form.
  *
  * @param {{ hour: number, question_number: number, text: string, updated_at?: string, our_answer?: string, actual_answer?: string, point_value?: number, got_correct?: boolean }} item
@@ -565,7 +620,20 @@ function buildQuestionLogItemElement(item) {
 
   const meta = document.createElement("div");
   meta.className = "question-log-meta";
-  meta.textContent = "Q" + qn;
+  const qLabel = document.createElement("span");
+  qLabel.className = "question-log-meta-label";
+  qLabel.textContent = "Q" + qn;
+  meta.appendChild(qLabel);
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "question-log-copy-button";
+  copyBtn.textContent = "Copy";
+  copyBtn.setAttribute("aria-label", "Copy question " + qn + " text to clipboard");
+  copyBtn.addEventListener("click", function () {
+    handleCopyQuestionText(copyBtn, item.text);
+  });
+  meta.appendChild(copyBtn);
 
   const body = document.createElement("div");
   body.className = "question-log-body";
