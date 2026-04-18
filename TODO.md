@@ -18,3 +18,5 @@
 - [ ] Allow editing: question text, answer, correctness status, points
 - [ ] Update UI to show edit buttons for each question row
 - [ ] Persist edits to database
+
+## Bugs / Investigations
