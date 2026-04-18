@@ -80,15 +80,20 @@ class SlidingWindowProcessor:
         
         while self.is_processing:
             current_time = time.time()
-            
-            # Trigger a new transcription every segment_interval_seconds
+
+            # Trigger a new transcription every segment_interval_seconds. Anchor
+            # ``last_process_time`` to wall time *after* ``_process_window`` returns so
+            # variable Whisper runtime doesn't let the next emit arrive sooner than
+            # ``segment_interval_seconds``. Without this the frontend countdown can
+            # snap back to full before reaching zero when a fast transcription
+            # follows a slow one.
             if current_time - last_process_time >= self.segment_interval_seconds:
                 try:
                     self._process_window()
-                    last_process_time = current_time
                 except Exception as e:
                     logger.error(f"Error processing window: {e}")
-            
+                last_process_time = time.time()
+
             time.sleep(0.5)  # Small sleep to prevent busy waiting
     
     def _process_window(self):
