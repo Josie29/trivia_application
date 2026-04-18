@@ -45,6 +45,7 @@ const btnUseSelection    = document.getElementById("btnUseSelection");
 const btnImportPointValues = document.getElementById("btnImportPointValues");
 const btnSaveToLog       = document.getElementById("btnSaveToLog");
 const captureFeedbackEl  = document.getElementById("captureFeedback");
+const importFeedbackEl   = document.getElementById("importFeedback");
 const questionLogEl = document.getElementById("questionLog");
 const questionLogHourSelectEl = document.getElementById(
   "questionLogHourSelect"
@@ -253,6 +254,30 @@ function setCaptureFeedback(msg, type) {
 }
 
 /**
+ * Shows short feedback next to the Import point values button in the shared
+ * question log card, or hides it when msg is empty. Separate from
+ * {@link setCaptureFeedback} so import results land adjacent to the button
+ * the user just clicked, not in the distant Captured question card.
+ *
+ * @param {string} msg - Message to show, or "" to clear.
+ * @param {"error"|"success"|""} [type] - Visual style; ignored when msg is empty.
+ */
+function setImportFeedback(msg, type) {
+  if (!importFeedbackEl) return;
+  if (!msg) {
+    importFeedbackEl.textContent = "";
+    importFeedbackEl.className = "question-log-import-feedback";
+    importFeedbackEl.hidden = true;
+    return;
+  }
+  importFeedbackEl.hidden = false;
+  importFeedbackEl.textContent = msg;
+  importFeedbackEl.className =
+    "question-log-import-feedback " +
+    (type === "success" ? "is-success" : "is-error");
+}
+
+/**
  * Copies highlighted transcript text into the question textarea. Shows feedback if nothing is selected.
  */
 function handleUseSelectionAsQuestion() {
@@ -381,6 +406,12 @@ function setPointValuesModalFeedback(msg, type) {
  */
 function buildAnchoredPointValuesModalRow(existing, detection) {
   const qn = Number(existing.question_number);
+  const prevPts = Number(existing.point_value);
+  const hasPrev = Number.isFinite(prevPts) && prevPts > 0;
+  // Only call it an overwrite when a detection would actually *change* a
+  // saved non-zero value. Detection == prev is a no-op; no warning needed.
+  const willOverwrite = !!(detection && hasPrev && prevPts !== detection.points);
+
   const row = document.createElement("div");
   row.className = "point-values-row";
   row.dataset.kind = "anchored";
@@ -389,11 +420,17 @@ function buildAnchoredPointValuesModalRow(existing, detection) {
   if (!detection) {
     row.classList.add("is-empty");
   }
+  if (willOverwrite) {
+    row.classList.add("is-overwrite");
+    row.dataset.overwrite = "1";
+  }
 
   const cb = document.createElement("input");
   cb.type = "checkbox";
   cb.className = "point-values-row-apply";
-  cb.checked = !!detection;
+  // Default unchecked for overwrites so a re-import does not clobber prior
+  // point values on one wrong click. User must explicitly tick to confirm.
+  cb.checked = !!detection && !willOverwrite;
   cb.setAttribute("aria-label", "Apply Q" + qn);
 
   const fields = document.createElement("div");
@@ -439,11 +476,15 @@ function buildAnchoredPointValuesModalRow(existing, detection) {
 
   const context = document.createElement("p");
   context.className = "point-values-row-context";
-  const prevPts = Number(existing.point_value);
-  const prevLabel =
-    Number.isFinite(prevPts) && prevPts > 0 ? prevPts + " pts" : "no points yet";
+  if (willOverwrite) {
+    context.classList.add("is-overwrite");
+  }
+  const prevLabel = hasPrev ? prevPts + " pts" : "no points yet";
   const bodyText = existing.text ? existing.text + "  (" + prevLabel + ")" : "(" + prevLabel + ")";
-  if (detection) {
+  if (willOverwrite) {
+    context.textContent =
+      "Will overwrite " + prevPts + " pts with " + detection.points + " — tick the box to confirm. " + bodyText;
+  } else if (detection) {
     context.textContent = bodyText;
   } else {
     context.textContent = "Not detected — enter manually. " + bodyText;
@@ -555,10 +596,15 @@ function openPointValuesModal(detections) {
   }
 
   let matchedCount = 0;
+  let overwriteCount = 0;
   for (const existing of savedForHour) {
     const qn = Number(existing.question_number);
     const det = detectionsByQn.get(qn) || null;
     if (det) matchedCount += 1;
+    const prev = Number(existing.point_value);
+    if (det && Number.isFinite(prev) && prev > 0 && prev !== det.points) {
+      overwriteCount += 1;
+    }
     pointValuesModalRowsEl.appendChild(
       buildAnchoredPointValuesModalRow(existing, det)
     );
@@ -585,7 +631,12 @@ function openPointValuesModal(detections) {
     }
   }
 
-  updatePointValuesModalSummary(matchedCount, savedForHour.length, extras.length);
+  updatePointValuesModalSummary(
+    matchedCount,
+    savedForHour.length,
+    extras.length,
+    overwriteCount
+  );
 
   pointValuesModalEl.hidden = false;
   pointValuesModalEl.dataset.targetHour = String(hour);
@@ -593,13 +644,17 @@ function openPointValuesModal(detections) {
 }
 
 /**
- * Renders the coverage summary at the top of the modal body.
+ * Renders the coverage summary at the top of the modal body. Toggles an
+ * ``is-overwrite`` modifier class when any detection would change a saved
+ * non-zero point value, so the banner can render in an amber "warning" style
+ * without swapping elements.
  *
  * @param {number} matched - Detections that matched a saved question.
  * @param {number} expected - Count of saved questions in the target hour.
  * @param {number} extras - Detections with no matching saved question.
+ * @param {number} overwrites - Rows whose detection would change a non-zero saved point value.
  */
-function updatePointValuesModalSummary(matched, expected, extras) {
+function updatePointValuesModalSummary(matched, expected, extras, overwrites) {
   const el = document.getElementById("pointValuesModalSummary");
   if (!el) return;
   const parts = ["Detected " + matched + " of " + expected + "."];
@@ -611,7 +666,16 @@ function updatePointValuesModalSummary(matched, expected, extras) {
         " with no saved question."
     );
   }
+  if (overwrites > 0) {
+    parts.push(
+      overwrites +
+        " row" +
+        (overwrites === 1 ? "" : "s") +
+        " would overwrite existing values — tick to confirm."
+    );
+  }
   el.textContent = parts.join(" ");
+  el.classList.toggle("is-overwrite", overwrites > 0);
 }
 
 /**
@@ -703,7 +767,7 @@ async function applyPointValuesFromModal() {
 
   if (errors === 0 && skippedMissing === 0) {
     closePointValuesModal();
-    setCaptureFeedback(
+    setImportFeedback(
       "Applied " + applied + " point value" + (applied === 1 ? "" : "s") + ".",
       applied > 0 ? "success" : "error"
     );
@@ -727,7 +791,7 @@ async function applyPointValuesFromModal() {
 function handleImportPointValuesFromSelection() {
   const selected = getSelectedTextInTranscript();
   if (!selected) {
-    setCaptureFeedback(
+    setImportFeedback(
       "Highlight the point-value announcement in the transcript first, then click again.",
       "error"
     );
@@ -741,7 +805,7 @@ function handleImportPointValuesFromSelection() {
     return Number(q.hour) === hour ? acc + 1 : acc;
   }, 0);
   if (savedCount === 0) {
-    setCaptureFeedback(
+    setImportFeedback(
       "Save the questions for Hour " +
         hour +
         " first — the import anchors on the saved question log.",
@@ -749,7 +813,7 @@ function handleImportPointValuesFromSelection() {
     );
     return;
   }
-  setCaptureFeedback("", "");
+  setImportFeedback("", "");
   openPointValuesModal(detections);
 }
 

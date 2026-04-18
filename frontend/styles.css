@@ -547,6 +547,50 @@ button.is-loading::before {
   color: var(--color-text-muted);
 }
 
+.question-log-toolbar-import-row {
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.question-log-import-btn {
+  font: inherit;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.question-log-import-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.question-log-import-btn:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+.question-log-import-feedback {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.question-log-import-feedback[hidden] { display: none; }
+
+.question-log-import-feedback.is-error {
+  color: var(--color-error);
+}
+
+.question-log-import-feedback.is-success {
+  color: var(--color-success);
+}
+
 .question-log-select {
   font: inherit;
   padding: 0.25rem 0.4rem;
@@ -1102,6 +1146,11 @@ body.is-modal-open { overflow: hidden; }
 
 .point-values-modal-summary:empty { display: none; }
 
+.point-values-modal-summary.is-overwrite {
+  background: color-mix(in srgb, var(--color-secondary) 18%, var(--color-surface));
+  color: var(--color-secondary-hover);
+}
+
 .point-values-extras-heading {
   margin: 0.75rem 0 0.25rem;
   padding-top: 0.75rem;
@@ -1141,6 +1190,16 @@ body.is-modal-open { overflow: hidden; }
 .point-values-row.is-extra {
   background: var(--color-error-bg);
   border-color: color-mix(in srgb, var(--color-error) 25%, var(--color-border));
+}
+
+.point-values-row.is-overwrite {
+  background: color-mix(in srgb, var(--color-secondary) 12%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-secondary) 45%, var(--color-border));
+}
+
+.point-values-row-context.is-overwrite {
+  color: var(--color-secondary-hover);
+  font-weight: 600;
 }
 
 .point-values-row-apply {

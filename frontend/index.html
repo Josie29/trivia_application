@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trivia AI — Live Stream Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=19" />
 </head>
 <body>
 
@@ -90,7 +90,6 @@
         <p id="captureFeedback" class="capture-feedback" role="status" aria-live="polite" hidden></p>
         <div class="question-actions">
           <button type="button" id="btnUseSelection">Use selection as question</button>
-          <button type="button" id="btnImportPointValues">Import point values from selection</button>
           <button type="button" id="btnSaveToLog" class="btn-save-log">Save to shared log</button>
         </div>
       </section>
@@ -112,6 +111,11 @@
           <select id="questionLogHourSelect" class="question-log-hour-select" aria-describedby="question-log-hour-help"></select>
           <span id="question-log-hour-help" class="question-log-hour-help">Contest hours 1–56</span>
         </div>
+        <div class="question-log-toolbar-row question-log-toolbar-import-row">
+          <button type="button" id="btnImportPointValues" class="question-log-import-btn">Import point values from transcript selection</button>
+          <span class="question-log-hour-help">Applies to the hour shown above.</span>
+        </div>
+        <p id="importFeedback" class="question-log-import-feedback" role="status" aria-live="polite" hidden></p>
       </div>
       <div id="questionLog" class="question-log" role="region" aria-label="Saved questions for all viewers"></div>
       <footer class="question-log-total-footer" aria-label="Contest points total">
@@ -140,7 +144,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <script src="config.js?v=19"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>
