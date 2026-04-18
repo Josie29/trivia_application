@@ -42,6 +42,7 @@ const questionHourEl     = document.getElementById("questionHour");
 const questionNumberEl   = document.getElementById("questionNumber");
 const questionTextEl     = document.getElementById("questionText");
 const btnUseSelection    = document.getElementById("btnUseSelection");
+const btnImportPointValues = document.getElementById("btnImportPointValues");
 const btnSaveToLog       = document.getElementById("btnSaveToLog");
 const captureFeedbackEl  = document.getElementById("captureFeedback");
 const questionLogEl = document.getElementById("questionLog");
@@ -51,6 +52,13 @@ const questionLogHourSelectEl = document.getElementById(
 const questionLogPointTotalEl = document.getElementById(
   "questionLogPointTotal"
 );
+
+const pointValuesModalEl = document.getElementById("pointValuesModal");
+const pointValuesModalRowsEl = document.getElementById("pointValuesModalRows");
+const pointValuesModalFeedbackEl = document.getElementById(
+  "pointValuesModalFeedback"
+);
+const btnPointValuesApply = document.getElementById("btnPointValuesApply");
 
 /** True when the server reports an active shared transcription session (may differ from SSE). */
 let serverSessionActive = false;
@@ -258,6 +266,491 @@ function handleUseSelectionAsQuestion() {
   }
   questionTextEl.value = normalizeTranscriptSnippetForQuestion(selected);
   setCaptureFeedback("Question text updated from your selection.", "success");
+}
+
+// ── Point-value import from selected transcript ──────────────────────────────
+
+/**
+ * Spoken number words the host commonly uses for question numbers and point
+ * values in a trivia hour. Covers 0-20 plus round tens up to 50.
+ *
+ * @type {Readonly<Record<string, number>>}
+ */
+const NUMBER_WORD_MAP = Object.freeze({
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+});
+
+/**
+ * Rewrites number-words into digits so the downstream regex only has to match
+ * numerals. Handles compound forms like "twenty five" and "thirty-two" first
+ * so "twenty" is not consumed alone and leave "five" dangling.
+ *
+ * @param {string} text - Lowercased source string.
+ * @returns {string}
+ */
+function wordNumbersToDigits(text) {
+  const compoundRe = /\b(twenty|thirty|forty|fifty)[\s-]+(one|two|three|four|five|six|seven|eight|nine)\b/g;
+  let out = text.replace(compoundRe, function (_, tens, ones) {
+    return String(NUMBER_WORD_MAP[tens] + NUMBER_WORD_MAP[ones]);
+  });
+  const singleRe = /\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\b/g;
+  out = out.replace(singleRe, function (m) {
+    return String(NUMBER_WORD_MAP[m]);
+  });
+  return out;
+}
+
+/**
+ * Scans a trivia host's announcement for `{question_number -> points}` pairs.
+ *
+ * Supports phrasings like:
+ *   - "Question 1 is worth 5 points"
+ *   - "Q3 — 15 pts"
+ *   - "Question two is worth ten points"
+ *
+ * The window between the question number and the point count is bounded to 80
+ * characters and cannot cross a period or newline, which keeps one sentence's
+ * number from being paired with another sentence's point count. Duplicates are
+ * resolved last-wins so a correction later in the selection overrides earlier.
+ *
+ * @param {string} text - Raw selected transcript text.
+ * @returns {Array<{question_number: number, points: number, raw_match: string}>}
+ */
+function parsePointValuesFromText(text) {
+  if (!text) return [];
+  const normalized = wordNumbersToDigits(String(text).toLowerCase());
+  const re = /(?:question|q)\s*(\d+)[^.\n]{0,80}?\b(\d+)\b\s*(?:points?|pts?)/g;
+  const byQn = new Map();
+  let m;
+  while ((m = re.exec(normalized)) !== null) {
+    const qn = parseInt(m[1], 10);
+    const pts = parseInt(m[2], 10);
+    if (!Number.isFinite(qn) || qn < 1 || qn > 100) continue;
+    if (!Number.isFinite(pts) || pts < 1 || pts > 1000) continue;
+    byQn.set(qn, { question_number: qn, points: pts, raw_match: m[0] });
+  }
+  return Array.from(byQn.values()).sort(function (a, b) {
+    return a.question_number - b.question_number;
+  });
+}
+
+/**
+ * True when the point-values review modal is currently shown. Used by the
+ * question-log poller to skip re-rendering while the user is reviewing.
+ *
+ * @returns {boolean}
+ */
+function isPointValuesModalOpen() {
+  return !!(pointValuesModalEl && !pointValuesModalEl.hidden);
+}
+
+/**
+ * Shows a short inline status message inside the modal footer area.
+ *
+ * @param {string} msg - Message text; empty clears and hides.
+ * @param {"error"|"success"|""} [type] - Visual style.
+ */
+function setPointValuesModalFeedback(msg, type) {
+  if (!pointValuesModalFeedbackEl) return;
+  if (!msg) {
+    pointValuesModalFeedbackEl.textContent = "";
+    pointValuesModalFeedbackEl.className = "point-values-modal-feedback";
+    pointValuesModalFeedbackEl.hidden = true;
+    return;
+  }
+  pointValuesModalFeedbackEl.hidden = false;
+  pointValuesModalFeedbackEl.textContent = msg;
+  pointValuesModalFeedbackEl.className =
+    "point-values-modal-feedback " +
+    (type === "success" ? "is-success" : type === "error" ? "is-error" : "");
+}
+
+/**
+ * Builds a row anchored to a saved question in the shared log.
+ *
+ * The question number is read-only (the row is keyed to that specific saved
+ * question). The points input is pre-filled when a detection matched this
+ * question, or left blank for the user to fill in manually.
+ *
+ * @param {{hour: number, question_number: number, text: string, point_value?: number}} existing
+ * @param {{question_number: number, points: number, raw_match: string} | null} detection
+ * @returns {HTMLElement}
+ */
+function buildAnchoredPointValuesModalRow(existing, detection) {
+  const qn = Number(existing.question_number);
+  const row = document.createElement("div");
+  row.className = "point-values-row";
+  row.dataset.kind = "anchored";
+  row.dataset.questionNumber = String(qn);
+  row.setAttribute("role", "listitem");
+  if (!detection) {
+    row.classList.add("is-empty");
+  }
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.className = "point-values-row-apply";
+  cb.checked = !!detection;
+  cb.setAttribute("aria-label", "Apply Q" + qn);
+
+  const fields = document.createElement("div");
+  fields.className = "point-values-row-fields";
+
+  const qnGroup = document.createElement("div");
+  qnGroup.className = "point-values-field";
+  const qnLabel = document.createElement("span");
+  qnLabel.className = "point-values-field-label";
+  qnLabel.textContent = "Q#";
+  const qnValue = document.createElement("span");
+  qnValue.className = "point-values-qn-static";
+  qnValue.textContent = String(qn);
+  qnGroup.appendChild(qnLabel);
+  qnGroup.appendChild(qnValue);
+
+  const ptsGroup = document.createElement("label");
+  ptsGroup.className = "point-values-field";
+  const ptsLabel = document.createElement("span");
+  ptsLabel.className = "point-values-field-label";
+  ptsLabel.textContent = "Points";
+  const ptsInput = document.createElement("input");
+  ptsInput.type = "number";
+  ptsInput.min = "0";
+  ptsInput.step = "1";
+  ptsInput.inputMode = "numeric";
+  ptsInput.className = "point-values-pts-input";
+  ptsInput.value = detection ? String(detection.points) : "";
+  if (!detection) {
+    ptsInput.placeholder = "—";
+  }
+  // Treat typing a value as intent to apply: sync the checkbox automatically
+  // so the user does not have to also tick the box for manually filled rows.
+  // Clearing the input flips the checkbox off, matching the "skip" semantics.
+  ptsInput.addEventListener("input", function () {
+    cb.checked = ptsInput.value.trim() !== "";
+  });
+  ptsGroup.appendChild(ptsLabel);
+  ptsGroup.appendChild(ptsInput);
+
+  fields.appendChild(qnGroup);
+  fields.appendChild(ptsGroup);
+
+  const context = document.createElement("p");
+  context.className = "point-values-row-context";
+  const prevPts = Number(existing.point_value);
+  const prevLabel =
+    Number.isFinite(prevPts) && prevPts > 0 ? prevPts + " pts" : "no points yet";
+  const bodyText = existing.text ? existing.text + "  (" + prevLabel + ")" : "(" + prevLabel + ")";
+  if (detection) {
+    context.textContent = bodyText;
+  } else {
+    context.textContent = "Not detected — enter manually. " + bodyText;
+  }
+
+  row.appendChild(cb);
+  row.appendChild(fields);
+  row.appendChild(context);
+  return row;
+}
+
+/**
+ * Builds an informational row for a detection whose question number does not
+ * match any saved question in the target hour. These rows cannot be applied
+ * without saving the underlying question first; the checkbox stays disabled.
+ *
+ * @param {{question_number: number, points: number, raw_match: string}} detection
+ * @param {number} hour
+ * @returns {HTMLElement}
+ */
+function buildExtraPointValuesModalRow(detection, hour) {
+  const row = document.createElement("div");
+  row.className = "point-values-row is-extra";
+  row.dataset.kind = "extra";
+  row.dataset.questionNumber = String(detection.question_number);
+  row.setAttribute("role", "listitem");
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.className = "point-values-row-apply";
+  cb.checked = false;
+  cb.disabled = true;
+  cb.setAttribute("aria-label", "Q" + detection.question_number + " not saved");
+
+  const fields = document.createElement("div");
+  fields.className = "point-values-row-fields";
+
+  const qnGroup = document.createElement("div");
+  qnGroup.className = "point-values-field";
+  const qnLabel = document.createElement("span");
+  qnLabel.className = "point-values-field-label";
+  qnLabel.textContent = "Q#";
+  const qnValue = document.createElement("span");
+  qnValue.className = "point-values-qn-static";
+  qnValue.textContent = String(detection.question_number);
+  qnGroup.appendChild(qnLabel);
+  qnGroup.appendChild(qnValue);
+
+  const ptsGroup = document.createElement("div");
+  ptsGroup.className = "point-values-field";
+  const ptsLabel = document.createElement("span");
+  ptsLabel.className = "point-values-field-label";
+  ptsLabel.textContent = "Points";
+  const ptsValue = document.createElement("span");
+  ptsValue.className = "point-values-pts-static";
+  ptsValue.textContent = String(detection.points);
+  ptsGroup.appendChild(ptsLabel);
+  ptsGroup.appendChild(ptsValue);
+
+  fields.appendChild(qnGroup);
+  fields.appendChild(ptsGroup);
+
+  const context = document.createElement("p");
+  context.className = "point-values-row-context is-missing";
+  context.textContent =
+    "No saved question for Hour " +
+    hour +
+    " Q" +
+    detection.question_number +
+    " — save the question first, then re-run the import.";
+
+  row.appendChild(cb);
+  row.appendChild(fields);
+  row.appendChild(context);
+  return row;
+}
+
+/**
+ * Opens the review modal, anchoring one row per saved question in the target
+ * hour and auto-filling points from matching detections. Detections whose
+ * question number has no saved question are appended below as read-only
+ * "extras" so they are not silently dropped.
+ *
+ * @param {Array<{question_number: number, points: number, raw_match: string}>} detections
+ */
+function openPointValuesModal(detections) {
+  if (!pointValuesModalEl || !pointValuesModalRowsEl) return;
+  const hour = getQuestionLogSelectedHour();
+  pointValuesModalRowsEl.innerHTML = "";
+  setPointValuesModalFeedback("", "");
+
+  const title = document.getElementById("pointValuesModalTitle");
+  if (title) {
+    title.textContent = "Import point values for Hour " + hour;
+  }
+
+  const savedForHour = questionLogCachedQuestions
+    .filter(function (q) {
+      return Number(q.hour) === hour;
+    })
+    .slice()
+    .sort(function (a, b) {
+      return Number(a.question_number) - Number(b.question_number);
+    });
+
+  const detectionsByQn = new Map();
+  for (const det of detections) {
+    detectionsByQn.set(Number(det.question_number), det);
+  }
+
+  let matchedCount = 0;
+  for (const existing of savedForHour) {
+    const qn = Number(existing.question_number);
+    const det = detectionsByQn.get(qn) || null;
+    if (det) matchedCount += 1;
+    pointValuesModalRowsEl.appendChild(
+      buildAnchoredPointValuesModalRow(existing, det)
+    );
+  }
+
+  const savedQnSet = new Set(
+    savedForHour.map(function (q) {
+      return Number(q.question_number);
+    })
+  );
+  const extras = detections.filter(function (d) {
+    return !savedQnSet.has(Number(d.question_number));
+  });
+
+  if (extras.length > 0) {
+    const heading = document.createElement("p");
+    heading.className = "point-values-extras-heading";
+    heading.textContent = "Detected but not saved";
+    pointValuesModalRowsEl.appendChild(heading);
+    for (const det of extras) {
+      pointValuesModalRowsEl.appendChild(
+        buildExtraPointValuesModalRow(det, hour)
+      );
+    }
+  }
+
+  updatePointValuesModalSummary(matchedCount, savedForHour.length, extras.length);
+
+  pointValuesModalEl.hidden = false;
+  pointValuesModalEl.dataset.targetHour = String(hour);
+  document.body.classList.add("is-modal-open");
+}
+
+/**
+ * Renders the coverage summary at the top of the modal body.
+ *
+ * @param {number} matched - Detections that matched a saved question.
+ * @param {number} expected - Count of saved questions in the target hour.
+ * @param {number} extras - Detections with no matching saved question.
+ */
+function updatePointValuesModalSummary(matched, expected, extras) {
+  const el = document.getElementById("pointValuesModalSummary");
+  if (!el) return;
+  const parts = ["Detected " + matched + " of " + expected + "."];
+  if (extras > 0) {
+    parts.push(
+      extras +
+        " extra detection" +
+        (extras === 1 ? "" : "s") +
+        " with no saved question."
+    );
+  }
+  el.textContent = parts.join(" ");
+}
+
+/**
+ * Hides the review modal and clears its content.
+ */
+function closePointValuesModal() {
+  if (!pointValuesModalEl) return;
+  pointValuesModalEl.hidden = true;
+  if (pointValuesModalRowsEl) pointValuesModalRowsEl.innerHTML = "";
+  setPointValuesModalFeedback("", "");
+  document.body.classList.remove("is-modal-open");
+  if (btnPointValuesApply) {
+    btnPointValuesApply.disabled = false;
+    btnPointValuesApply.textContent = "Apply selected";
+  }
+}
+
+/**
+ * Walks the modal rows, upserts checked+valid rows sequentially via POST /api/questions
+ * using the existing question's text to keep the upsert safe, and surfaces a summary.
+ */
+async function applyPointValuesFromModal() {
+  if (!pointValuesModalEl || !pointValuesModalRowsEl || !btnPointValuesApply) return;
+  const hour = parseInt(String(pointValuesModalEl.dataset.targetHour || ""), 10);
+  if (!Number.isFinite(hour) || hour < 1 || hour > QUESTION_LOG_MAX_HOUR) {
+    setPointValuesModalFeedback("Could not determine target hour.", "error");
+    return;
+  }
+
+  const rows = pointValuesModalRowsEl.querySelectorAll(".point-values-row");
+  let applied = 0;
+  let skippedMissing = 0;
+  let errors = 0;
+
+  btnPointValuesApply.disabled = true;
+  btnPointValuesApply.textContent = "Applying…";
+  setPointValuesModalFeedback("", "");
+
+  for (const row of rows) {
+    if (row.dataset.kind !== "anchored") continue;
+
+    const cb = row.querySelector(".point-values-row-apply");
+    if (!cb || !cb.checked) continue;
+
+    const qn = parseInt(String(row.dataset.questionNumber || ""), 10);
+    const ptsInput = row.querySelector(".point-values-pts-input");
+    const rawPts = ptsInput ? String(ptsInput.value).trim() : "";
+
+    // Empty points input = user intentionally skipped this row. Do not post
+    // so we preserve any prior point_value already saved for the question.
+    if (rawPts === "") continue;
+
+    const pts = parseInt(rawPts, 10);
+    if (!Number.isFinite(qn) || qn < 1 || !Number.isFinite(pts) || pts < 0) {
+      errors += 1;
+      continue;
+    }
+
+    const existing = questionLogCachedQuestions.find(function (q) {
+      return Number(q.hour) === hour && Number(q.question_number) === qn;
+    });
+    if (!existing) {
+      skippedMissing += 1;
+      continue;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/questions"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hour: hour,
+          question_number: qn,
+          text: existing.text,
+          point_value: pts,
+        }),
+      });
+      if (res.ok) {
+        applied += 1;
+      } else {
+        errors += 1;
+      }
+    } catch (_) {
+      errors += 1;
+    }
+  }
+
+  await refreshQuestionLog({ forceRender: true }).catch(function () {});
+
+  if (errors === 0 && skippedMissing === 0) {
+    closePointValuesModal();
+    setCaptureFeedback(
+      "Applied " + applied + " point value" + (applied === 1 ? "" : "s") + ".",
+      applied > 0 ? "success" : "error"
+    );
+    return;
+  }
+
+  const parts = ["Applied " + applied];
+  if (skippedMissing > 0) parts.push(skippedMissing + " skipped (no saved question)");
+  if (errors > 0) parts.push(errors + " failed");
+  setPointValuesModalFeedback(
+    parts.join(" · "),
+    errors > 0 ? "error" : "success"
+  );
+  btnPointValuesApply.disabled = false;
+  btnPointValuesApply.textContent = "Apply selected";
+}
+
+/**
+ * Button handler: parse the current transcript selection and open the modal.
+ */
+function handleImportPointValuesFromSelection() {
+  const selected = getSelectedTextInTranscript();
+  if (!selected) {
+    setCaptureFeedback(
+      "Highlight the point-value announcement in the transcript first, then click again.",
+      "error"
+    );
+    return;
+  }
+  // Detections may be empty — the modal still opens so the user can fill in
+  // every question's points manually when the parser catches nothing.
+  const detections = parsePointValuesFromText(selected);
+  const hour = getQuestionLogSelectedHour();
+  const savedCount = questionLogCachedQuestions.reduce(function (acc, q) {
+    return Number(q.hour) === hour ? acc + 1 : acc;
+  }, 0);
+  if (savedCount === 0) {
+    setCaptureFeedback(
+      "Save the questions for Hour " +
+        hour +
+        " first — the import anchors on the saved question log.",
+      "error"
+    );
+    return;
+  }
+  setCaptureFeedback("", "");
+  openPointValuesModal(detections);
 }
 
 // ── Shared question log (server-backed, all viewers) ─────────────────────────
@@ -945,7 +1438,9 @@ async function refreshQuestionLog(options) {
   updateQuestionLogPointTotal();
   if (
     !forceRender &&
-    (questionLogScoringDirty || isQuestionLogScoringEditorOpen())
+    (questionLogScoringDirty ||
+      isQuestionLogScoringEditorOpen() ||
+      isPointValuesModalOpen())
   ) {
     return;
   }
@@ -1406,6 +1901,32 @@ btnUseSelection.addEventListener("click", handleUseSelectionAsQuestion);
 btnSaveToLog.addEventListener("click", function () {
   handleSaveToSharedLog();
 });
+if (btnImportPointValues) {
+  btnImportPointValues.addEventListener(
+    "click",
+    handleImportPointValuesFromSelection
+  );
+}
+if (btnPointValuesApply) {
+  btnPointValuesApply.addEventListener("click", function () {
+    applyPointValuesFromModal().catch(function (err) {
+      setPointValuesModalFeedback("Network error: " + err.message, "error");
+    });
+  });
+}
+if (pointValuesModalEl) {
+  pointValuesModalEl.addEventListener("click", function (ev) {
+    const t = ev.target;
+    if (t && t instanceof Element && t.hasAttribute("data-close-modal")) {
+      closePointValuesModal();
+    }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && isPointValuesModalOpen()) {
+      closePointValuesModal();
+    }
+  });
+}
 window.addEventListener("beforeunload", function () {
   stopQuestionLogPolling();
 });

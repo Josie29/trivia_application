@@ -20,3 +20,7 @@
 - [ ] Persist edits to database
 
 ## Bugs / Investigations
+
+## Tech Debt
+
+- [ ] Remove the unused LLM question extractor — `backend/core/QuestionExtractor.py`, the OpenAI dependency wiring in `backend/config.py` (`OPENAI_API_KEY`, `ENABLE_QUESTION_EXTRACTION`), and its call site in `backend/core/SlidingWindowProcessor.py`. Not part of the product flow anymore.
