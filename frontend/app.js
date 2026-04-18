@@ -314,21 +314,29 @@ function isQuestionLogScoringEditorOpen() {
 }
 
 /**
- * Updates the running sum of ``point_value`` across all saved questions in the shared log.
+ * Updates the running point total as an ``earned / possible`` fraction across all saved
+ * questions in the shared log. ``possible`` sums every positive ``point_value``; ``earned``
+ * sums only those rows explicitly marked ``got_correct === true``.
  */
 function updateQuestionLogPointTotal() {
   if (!questionLogPointTotalEl) {
     return;
   }
-  let sum = 0;
+  let earned = 0;
+  let possible = 0;
   const qs = questionLogCachedQuestions || [];
   for (let i = 0; i < qs.length; i += 1) {
     const pv = Number(qs[i].point_value);
-    if (Number.isFinite(pv) && pv > 0) {
-      sum += Math.floor(pv);
+    if (!Number.isFinite(pv) || pv <= 0) {
+      continue;
+    }
+    const pts = Math.floor(pv);
+    possible += pts;
+    if (qs[i].got_correct === true) {
+      earned += pts;
     }
   }
-  questionLogPointTotalEl.textContent = String(sum);
+  questionLogPointTotalEl.textContent = earned + " / " + possible;
 }
 
 /**
