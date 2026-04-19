@@ -99,6 +99,90 @@ class TestQuestionLogAPI(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 422)
 
+    def test_edit_updates_text_and_timestamp(self) -> None:
+        """Upserting the same hour/Q# with new text replaces it and bumps updated_at.
+
+        Removing this test would let text edits silently regress to the old value,
+        or allow updated_at to stay stale after an edit.
+        """
+        first = self.client.post(
+            "/api/questions",
+            json={"hour": 3, "question_number": 2, "text": "Original wording"},
+        ).json()
+        original_updated = first["question"]["updated_at"]
+
+        res = self.client.post(
+            "/api/questions",
+            json={"hour": 3, "question_number": 2, "text": "Edited wording"},
+        )
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertTrue(body["overwritten"])
+        self.assertEqual(body["question"]["text"], "Edited wording")
+        self.assertGreaterEqual(body["question"]["updated_at"], original_updated)
+
+    def test_correctness_mode_override_pins_got_correct(self) -> None:
+        """correctness_mode='correct' forces got_correct=True even when answers don't match.
+
+        Protects the manual-override UX: if this breaks, answer-mismatch would
+        silently flip the stored correctness back to False after save.
+        """
+        self.client.post(
+            "/api/questions",
+            json={
+                "hour": 1,
+                "question_number": 1,
+                "text": "Capital of France?",
+                "our_answer": "London",
+                "actual_answer": "Paris",
+                "correctness_mode": "correct",
+            },
+        )
+        q = self.client.get("/api/questions").json()["questions"][0]
+        self.assertTrue(q["got_correct"])
+        self.assertTrue(q["got_correct_override"])
+
+        # Editing answers again without touching mode must preserve the override.
+        self.client.post(
+            "/api/questions",
+            json={
+                "hour": 1,
+                "question_number": 1,
+                "text": "Capital of France?",
+                "our_answer": "Berlin",
+            },
+        )
+        q = self.client.get("/api/questions").json()["questions"][0]
+        self.assertTrue(q["got_correct"], "override should persist across edits")
+        self.assertTrue(q["got_correct_override"])
+
+    def test_correctness_mode_auto_clears_override(self) -> None:
+        """correctness_mode='auto' clears the stored override and recomputes from answers."""
+        self.client.post(
+            "/api/questions",
+            json={
+                "hour": 1,
+                "question_number": 1,
+                "text": "2+2?",
+                "our_answer": "5",
+                "actual_answer": "4",
+                "correctness_mode": "correct",
+            },
+        )
+        self.client.post(
+            "/api/questions",
+            json={
+                "hour": 1,
+                "question_number": 1,
+                "text": "2+2?",
+                "correctness_mode": "auto",
+            },
+        )
+        q = self.client.get("/api/questions").json()["questions"][0]
+        self.assertIsNone(q["got_correct_override"])
+        # Answers still mismatch (5 vs 4), so auto recompute → False.
+        self.assertFalse(q["got_correct"])
+
 
 if __name__ == "__main__":
     unittest.main()

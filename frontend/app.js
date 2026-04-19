@@ -971,10 +971,21 @@ function computeGotCorrectPreview(ourText, actualText) {
  * @param {HTMLElement} badgeEl
  * @param {string} ourText
  * @param {string} actualText
+ * @param {"auto"|"correct"|"incorrect"} [mode="auto"] - When not "auto", pin the badge regardless of answers.
  */
-function updateQuestionLogScoreBadge(badgeEl, ourText, actualText) {
-  const r = computeGotCorrectPreview(ourText, actualText);
+function updateQuestionLogScoreBadge(badgeEl, ourText, actualText, mode) {
   badgeEl.className = "question-log-result";
+  if (mode === "correct") {
+    badgeEl.classList.add("is-correct");
+    badgeEl.textContent = "Correct (manual)";
+    return;
+  }
+  if (mode === "incorrect") {
+    badgeEl.classList.add("is-incorrect");
+    badgeEl.textContent = "Incorrect (manual)";
+    return;
+  }
+  const r = computeGotCorrectPreview(ourText, actualText);
   if (r === null) {
     badgeEl.classList.add("is-pending");
     badgeEl.textContent = "Awaiting both answers";
@@ -988,15 +999,25 @@ function updateQuestionLogScoreBadge(badgeEl, ourText, actualText) {
 }
 
 /**
- * Persists scoring fields for one log row (full POST with question text).
+ * Persists all editable fields for one log row (text, answers, points, correctness mode).
  *
- * @param {{ hour: number, question_number: number, text: string }} item - Row snapshot including wording.
+ * @param {{ hour: number, question_number: number }} item - Row key.
+ * @param {string} questionText - Edited question wording.
  * @param {string} ourAnswer
  * @param {string} actualAnswer
  * @param {number} pointValue
+ * @param {"auto"|"correct"|"incorrect"} correctnessMode - Override intent.
  * @param {HTMLButtonElement} btn - Save button (disabled while sending).
  */
-async function saveQuestionLogScoring(item, ourAnswer, actualAnswer, pointValue, btn) {
+async function saveQuestionLogEdit(
+  item,
+  questionText,
+  ourAnswer,
+  actualAnswer,
+  pointValue,
+  correctnessMode,
+  btn
+) {
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Saving…";
@@ -1007,15 +1028,16 @@ async function saveQuestionLogScoring(item, ourAnswer, actualAnswer, pointValue,
       body: JSON.stringify({
         hour: item.hour,
         question_number: item.question_number,
-        text: item.text,
+        text: questionText,
         our_answer: ourAnswer,
         actual_answer: actualAnswer,
         point_value: pointValue,
+        correctness_mode: correctnessMode,
       }),
     });
     if (!res.ok) {
       const detail = parseErrorDetail(await res.text());
-      window.alert("Could not save scoring: " + detail);
+      window.alert("Could not save: " + detail);
       return;
     }
     questionLogScoringDirty = false;
@@ -1210,19 +1232,34 @@ function buildQuestionLogItemElement(item) {
   toggleBtn.setAttribute("aria-expanded", "false");
   const editPanelId = baseId + "-edit";
   toggleBtn.setAttribute("aria-controls", editPanelId);
-  toggleBtn.textContent = hasQuestionLogScoringSaved(item)
-    ? "Edit scoring"
-    : "Add scoring";
+  toggleBtn.textContent = "Edit";
 
   const editPanel = document.createElement("div");
   editPanel.id = editPanelId;
   editPanel.className = "question-log-score-edit";
   editPanel.hidden = true;
   editPanel.setAttribute("role", "region");
-  editPanel.setAttribute(
-    "aria-label",
-    "Edit scoring for question " + qn
-  );
+  editPanel.setAttribute("aria-label", "Edit question " + qn);
+
+  // Question text (full-width, above the answer grid)
+  const textWrap = document.createElement("div");
+  textWrap.className = "question-log-field question-log-field-question";
+  const textLabel = document.createElement("label");
+  textLabel.className = "question-log-field-label";
+  textLabel.htmlFor = baseId + "-text";
+  textLabel.textContent = "Question text";
+  const textInput = document.createElement("textarea");
+  textInput.className = "question-log-text-input question-log-question-input";
+  textInput.id = baseId + "-text";
+  textInput.rows = 3;
+  textInput.value = String(item.text ?? "");
+  const textError = document.createElement("p");
+  textError.className = "question-log-field-error";
+  textError.hidden = true;
+  textError.textContent = "Question text cannot be empty.";
+  textWrap.appendChild(textLabel);
+  textWrap.appendChild(textInput);
+  textWrap.appendChild(textError);
 
   const grid = document.createElement("div");
   grid.className = "question-log-score-grid";
@@ -1281,39 +1318,102 @@ function buildQuestionLogItemElement(item) {
   grid.appendChild(actWrap);
   grid.appendChild(ptsWrap);
 
+  // Correctness mode selector (Auto / Correct / Incorrect)
+  const modeWrap = document.createElement("fieldset");
+  modeWrap.className = "question-log-mode";
+  const modeLegend = document.createElement("legend");
+  modeLegend.className = "question-log-field-label";
+  modeLegend.textContent = "Correctness";
+  modeWrap.appendChild(modeLegend);
+  const modeName = baseId + "-mode";
+  const initialMode =
+    item.got_correct_override === true
+      ? "correct"
+      : item.got_correct_override === false
+      ? "incorrect"
+      : "auto";
+  const modeOptions = [
+    { value: "auto", label: "Auto (from answers)" },
+    { value: "correct", label: "Correct" },
+    { value: "incorrect", label: "Incorrect" },
+  ];
+  const modeInputs = [];
+  for (const opt of modeOptions) {
+    const optLabel = document.createElement("label");
+    optLabel.className = "question-log-mode-option";
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = modeName;
+    radio.value = opt.value;
+    radio.checked = opt.value === initialMode;
+    modeInputs.push(radio);
+    const span = document.createElement("span");
+    span.textContent = opt.label;
+    optLabel.appendChild(radio);
+    optLabel.appendChild(span);
+    modeWrap.appendChild(optLabel);
+  }
+
+  function currentMode() {
+    for (const r of modeInputs) {
+      if (r.checked) return r.value;
+    }
+    return "auto";
+  }
+
   const footer = document.createElement("div");
   footer.className = "question-log-score-footer";
 
   const badge = document.createElement("span");
   badge.className = "question-log-result";
-  updateQuestionLogScoreBadge(badge, ourInput.value, actualInput.value);
+  updateQuestionLogScoreBadge(badge, ourInput.value, actualInput.value, initialMode);
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "question-log-save-scoring";
-  saveBtn.textContent = "Save scoring";
+  saveBtn.textContent = "Save changes";
 
   function syncBadge() {
-    updateQuestionLogScoreBadge(badge, ourInput.value, actualInput.value);
+    updateQuestionLogScoreBadge(badge, ourInput.value, actualInput.value, currentMode());
   }
 
   ourInput.addEventListener("input", syncBadge);
   actualInput.addEventListener("input", syncBadge);
+  for (const r of modeInputs) {
+    r.addEventListener("change", function () {
+      questionLogScoringDirty = true;
+      syncBadge();
+    });
+  }
 
-  const snapshot = {
-    hour: item.hour,
-    question_number: item.question_number,
-    text: item.text,
-  };
+  function validateText() {
+    const ok = textInput.value.trim().length > 0;
+    textError.hidden = ok;
+    textInput.classList.toggle("is-invalid", !ok);
+    saveBtn.disabled = !ok;
+    return ok;
+  }
+
+  textInput.addEventListener("input", function () {
+    questionLogScoringDirty = true;
+    validateText();
+  });
+  validateText();
 
   saveBtn.addEventListener("click", function () {
+    if (!validateText()) {
+      textInput.focus();
+      return;
+    }
     const pts = parseInt(String(ptsInput.value ?? "0"), 10);
     const pv = Number.isFinite(pts) && pts >= 0 ? pts : 0;
-    saveQuestionLogScoring(
-      snapshot,
+    saveQuestionLogEdit(
+      { hour: item.hour, question_number: item.question_number },
+      textInput.value,
       ourInput.value,
       actualInput.value,
       pv,
+      currentMode(),
       saveBtn
     );
   });
@@ -1321,22 +1421,22 @@ function buildQuestionLogItemElement(item) {
   footer.appendChild(badge);
   footer.appendChild(saveBtn);
 
+  editPanel.appendChild(textWrap);
   editPanel.appendChild(grid);
+  editPanel.appendChild(modeWrap);
   editPanel.appendChild(footer);
 
   toggleBtn.addEventListener("click", function () {
     const willOpen = editPanel.hidden;
     editPanel.hidden = !willOpen;
     toggleBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
-    toggleBtn.textContent = willOpen ? "Close editor" : hasQuestionLogScoringSaved(item)
-      ? "Edit scoring"
-      : "Add scoring";
-    if (willOpen && ourInput) {
+    toggleBtn.textContent = willOpen ? "Close editor" : "Edit";
+    row.classList.toggle("is-editing", willOpen);
+    if (willOpen) {
       window.setTimeout(function () {
-        ourInput.focus();
+        textInput.focus();
       }, 0);
-    }
-    if (!willOpen) {
+    } else {
       window.setTimeout(function () {
         if (!questionLogScoringDirty) {
           refreshQuestionLog().catch(function () {});
