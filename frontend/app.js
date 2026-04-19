@@ -363,13 +363,39 @@ function parsePointValuesFromText(text) {
 }
 
 /**
+ * Row view model held on each ``.point-values-row`` DOM node as ``row._model``.
+ * Render, reconcile, and apply all read from this — one source of truth per row.
+ *
+ * ``prevPts === 0`` means "no prior"; a saved zero is indistinguishable from
+ * never-scored in the data model, so both are treated as safe to overwrite.
+ *
+ * @typedef {Object} PointValuesRowModel
+ * @property {"anchored" | "extra"} kind
+ * @property {number} qn
+ * @property {string} text
+ * @property {number} prevPts
+ * @property {number | null} detectedPts
+ * @property {number} hour
+ */
+
+/**
+ * Open-modal state. Null while the modal is closed. Only holds things that
+ * cannot be re-derived by iterating row elements; per-row state lives on the
+ * rows themselves.
+ *
+ * @type {{hour: number, rows: HTMLElement[], matched: number, expected: number, extrasCount: number} | null}
+ */
+let pointValuesModalState = null;
+
+/**
  * True when the point-values review modal is currently shown. Used by the
- * question-log poller to skip re-rendering while the user is reviewing.
+ * question-log poller to skip re-rendering while the user is reviewing, and
+ * by the Escape key handler to know when to close.
  *
  * @returns {boolean}
  */
 function isPointValuesModalOpen() {
-  return !!(pointValuesModalEl && !pointValuesModalEl.hidden);
+  return pointValuesModalState !== null;
 }
 
 /**
@@ -394,186 +420,175 @@ function setPointValuesModalFeedback(msg, type) {
 }
 
 /**
- * Builds a row anchored to a saved question in the shared log.
+ * Builds one labeled field (``<label>`` + static value span). Shared by the
+ * Q# column and the extras' static Points column.
  *
- * The question number is read-only (the row is keyed to that specific saved
- * question). The points input is pre-filled when a detection matched this
- * question, or left blank for the user to fill in manually.
- *
- * @param {{hour: number, question_number: number, text: string, point_value?: number}} existing
- * @param {{question_number: number, points: number, raw_match: string} | null} detection
+ * @param {string} labelText
+ * @param {string} valueText
+ * @param {string} valueClass - CSS class on the value span.
  * @returns {HTMLElement}
  */
-function buildAnchoredPointValuesModalRow(existing, detection) {
-  const qn = Number(existing.question_number);
-  const prevPts = Number(existing.point_value);
-  const hasPrev = Number.isFinite(prevPts) && prevPts > 0;
+function buildStaticField(labelText, valueText, valueClass) {
+  const wrap = document.createElement("div");
+  wrap.className = "point-values-field";
+  const label = document.createElement("span");
+  label.className = "point-values-field-label";
+  label.textContent = labelText;
+  const value = document.createElement("span");
+  value.className = valueClass;
+  value.textContent = valueText;
+  wrap.appendChild(label);
+  wrap.appendChild(value);
+  return wrap;
+}
 
+/**
+ * Builds one modal row from its view model. Anchored rows get an editable
+ * Points input wired to {@link reconcileRow}; extras get a static Points span
+ * and a permanent red "save first" status line. The model is attached as
+ * ``row._model`` so reconcile and apply can read it without re-deriving.
+ *
+ * @param {PointValuesRowModel} model
+ * @returns {HTMLElement}
+ */
+function buildPointValuesRow(model) {
   const row = document.createElement("div");
   row.className = "point-values-row";
-  row.dataset.kind = "anchored";
-  row.dataset.questionNumber = String(qn);
+  row.dataset.kind = model.kind;
   row.setAttribute("role", "listitem");
+  row._model = model;
 
   const fields = document.createElement("div");
   fields.className = "point-values-row-fields";
-
-  const qnGroup = document.createElement("div");
-  qnGroup.className = "point-values-field";
-  const qnLabel = document.createElement("span");
-  qnLabel.className = "point-values-field-label";
-  qnLabel.textContent = "Q#";
-  const qnValue = document.createElement("span");
-  qnValue.className = "point-values-qn-static";
-  qnValue.textContent = String(qn);
-  qnGroup.appendChild(qnLabel);
-  qnGroup.appendChild(qnValue);
-
-  const ptsGroup = document.createElement("label");
-  ptsGroup.className = "point-values-field";
-  const ptsLabel = document.createElement("span");
-  ptsLabel.className = "point-values-field-label";
-  ptsLabel.textContent = "Points";
-  const ptsInput = document.createElement("input");
-  ptsInput.type = "number";
-  ptsInput.min = "0";
-  ptsInput.step = "1";
-  ptsInput.inputMode = "numeric";
-  ptsInput.className = "point-values-pts-input";
-  ptsInput.value = detection ? String(detection.points) : "";
-  if (!detection) {
-    ptsInput.placeholder = "—";
-  }
-  ptsGroup.appendChild(ptsLabel);
-  ptsGroup.appendChild(ptsInput);
-
-  fields.appendChild(qnGroup);
-  fields.appendChild(ptsGroup);
+  fields.appendChild(
+    buildStaticField("Q#", String(model.qn), "point-values-qn-static")
+  );
 
   const contextWrap = document.createElement("div");
   contextWrap.className = "point-values-row-context-wrap";
-
   const context = document.createElement("p");
   context.className = "point-values-row-context";
-  context.textContent = existing.text || "(no question text saved)";
-  contextWrap.appendChild(context);
-
-  // Subordinate status line: surfaced only when there is something actionable
-  // (an overwrite warning). Stays hidden for empty rows and plain detections
-  // so default rows collapse to a single line.
   const status = document.createElement("p");
   status.className = "point-values-row-status";
-  status.hidden = true;
-  contextWrap.appendChild(status);
+  row._statusEl = status;
 
-  // Single source of truth for the row's visual state. Called at init and
-  // on every input change. Keeps the amber warning, the auto-tick, and the
-  // status line in sync whether the value came from the parser or typing.
-  function reconcileRowState() {
-    const raw = ptsInput.value.trim();
-    const parsed = raw === "" ? NaN : parseInt(raw, 10);
-    const hasTyped = raw !== "" && Number.isFinite(parsed);
-    const isOverwrite = hasTyped && hasPrev && parsed !== prevPts;
+  if (model.kind === "anchored") {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "1";
+    input.inputMode = "numeric";
+    input.className = "point-values-pts-input";
+    input.placeholder = "\u2014";
+    input.value = model.detectedPts != null ? String(model.detectedPts) : "";
+    input.addEventListener("input", function () {
+      reconcileRow(row);
+      renderPointValuesModalSummary();
+    });
+    row._ptsInput = input;
 
-    row.classList.toggle("is-empty", !hasTyped);
-    row.classList.toggle("is-overwrite", isOverwrite);
-    row.dataset.overwrite = isOverwrite ? "1" : "";
+    const ptsField = document.createElement("label");
+    ptsField.className = "point-values-field";
+    const ptsLabel = document.createElement("span");
+    ptsLabel.className = "point-values-field-label";
+    ptsLabel.textContent = "Points";
+    ptsField.appendChild(ptsLabel);
+    ptsField.appendChild(input);
+    fields.appendChild(ptsField);
 
-    if (isOverwrite) {
-      status.hidden = false;
-      status.className = "point-values-row-status is-overwrite";
-      status.textContent =
-        "Will overwrite " + prevPts + " pts with " + parsed + ".";
-    } else {
-      status.hidden = true;
-      status.textContent = "";
-      status.className = "point-values-row-status";
-    }
+    context.textContent = model.text || "(no question text saved)";
+    status.hidden = true;
+  } else {
+    row.classList.add("is-extra");
+    fields.appendChild(
+      buildStaticField(
+        "Points",
+        String(model.detectedPts),
+        "point-values-pts-static"
+      )
+    );
+    context.textContent = "(no saved question)";
+    status.classList.add("is-missing");
+    status.textContent =
+      "Save Hour " + model.hour + " Q" + model.qn +
+      " first, then re-run the import.";
   }
 
-  ptsInput.addEventListener("input", function () {
-    reconcileRowState();
-    recomputePointValuesModalSummary();
-  });
-  reconcileRowState();
-
-  row.appendChild(fields);
-  row.appendChild(contextWrap);
-  return row;
-}
-
-/**
- * Builds an informational row for a detection whose question number does not
- * match any saved question in the target hour. These rows cannot be applied
- * without saving the underlying question first; they render as read-only info.
- *
- * @param {{question_number: number, points: number, raw_match: string}} detection
- * @param {number} hour
- * @returns {HTMLElement}
- */
-function buildExtraPointValuesModalRow(detection, hour) {
-  const row = document.createElement("div");
-  row.className = "point-values-row is-extra";
-  row.dataset.kind = "extra";
-  row.dataset.questionNumber = String(detection.question_number);
-  row.setAttribute("role", "listitem");
-
-  const fields = document.createElement("div");
-  fields.className = "point-values-row-fields";
-
-  const qnGroup = document.createElement("div");
-  qnGroup.className = "point-values-field";
-  const qnLabel = document.createElement("span");
-  qnLabel.className = "point-values-field-label";
-  qnLabel.textContent = "Q#";
-  const qnValue = document.createElement("span");
-  qnValue.className = "point-values-qn-static";
-  qnValue.textContent = String(detection.question_number);
-  qnGroup.appendChild(qnLabel);
-  qnGroup.appendChild(qnValue);
-
-  const ptsGroup = document.createElement("div");
-  ptsGroup.className = "point-values-field";
-  const ptsLabel = document.createElement("span");
-  ptsLabel.className = "point-values-field-label";
-  ptsLabel.textContent = "Points";
-  const ptsValue = document.createElement("span");
-  ptsValue.className = "point-values-pts-static";
-  ptsValue.textContent = String(detection.points);
-  ptsGroup.appendChild(ptsLabel);
-  ptsGroup.appendChild(ptsValue);
-
-  fields.appendChild(qnGroup);
-  fields.appendChild(ptsGroup);
-
-  const contextWrap = document.createElement("div");
-  contextWrap.className = "point-values-row-context-wrap";
-
-  const context = document.createElement("p");
-  context.className = "point-values-row-context";
-  context.textContent = "(no saved question)";
   contextWrap.appendChild(context);
-
-  const status = document.createElement("p");
-  status.className = "point-values-row-status is-missing";
-  status.textContent =
-    "Save Hour " +
-    hour +
-    " Q" +
-    detection.question_number +
-    " first, then re-run the import.";
   contextWrap.appendChild(status);
-
   row.appendChild(fields);
   row.appendChild(contextWrap);
+
+  if (model.kind === "anchored") reconcileRow(row);
   return row;
 }
 
 /**
- * Opens the review modal, anchoring one row per saved question in the target
- * hour and auto-filling points from matching detections. Detections whose
- * question number has no saved question are appended below as read-only
- * "extras" so they are not silently dropped.
+ * Syncs an anchored row's classes and status line to its current input value.
+ * No-op for extras (their display is fixed at build time). Called on every
+ * keystroke in the row's Points input.
+ *
+ * @param {HTMLElement} row
+ */
+function reconcileRow(row) {
+  const model = row._model;
+  if (!model || model.kind !== "anchored") return;
+  const raw = row._ptsInput.value.trim();
+  const parsed = raw === "" ? NaN : parseInt(raw, 10);
+  const hasTyped = Number.isFinite(parsed);
+  const isOverwrite = hasTyped && model.prevPts > 0 && parsed !== model.prevPts;
+
+  row.classList.toggle("is-empty", !hasTyped);
+  row.classList.toggle("is-overwrite", isOverwrite);
+
+  const status = row._statusEl;
+  if (isOverwrite) {
+    status.hidden = false;
+    status.className = "point-values-row-status is-overwrite";
+    status.textContent =
+      "Will overwrite " + model.prevPts + " pts with " + parsed + ".";
+  } else {
+    status.hidden = true;
+    status.className = "point-values-row-status";
+    status.textContent = "";
+  }
+}
+
+/**
+ * Paints the summary banner from {@link pointValuesModalState} plus a live
+ * count of anchored rows currently flagged ``is-overwrite``. Safe to call
+ * repeatedly — reads state, derives counts, toggles the banner class.
+ */
+function renderPointValuesModalSummary() {
+  const el = document.getElementById("pointValuesModalSummary");
+  if (!el || !pointValuesModalState) return;
+  const { matched, expected, extrasCount, rows } = pointValuesModalState;
+  const overwrites = rows.filter(function (r) {
+    return r.classList.contains("is-overwrite");
+  }).length;
+
+  const parts = ["Detected " + matched + " of " + expected + "."];
+  if (extrasCount > 0) {
+    parts.push(
+      extrasCount + " extra detection" + (extrasCount === 1 ? "" : "s") +
+      " with no saved question."
+    );
+  }
+  if (overwrites > 0) {
+    parts.push(
+      overwrites + " row" + (overwrites === 1 ? "" : "s") +
+      " will overwrite existing values."
+    );
+  }
+  el.textContent = parts.join(" ");
+  el.classList.toggle("is-overwrite", overwrites > 0);
+}
+
+/**
+ * Opens the review modal: one anchored row per saved question in the target
+ * hour, plus a "Detected but not saved" section below for detections whose
+ * question number has no saved question. Modal state is stored in
+ * {@link pointValuesModalState} for the lifetime of the open modal.
  *
  * @param {Array<{question_number: number, points: number, raw_match: string}>} detections
  */
@@ -584,127 +599,82 @@ function openPointValuesModal(detections) {
   setPointValuesModalFeedback("", "");
 
   const title = document.getElementById("pointValuesModalTitle");
-  if (title) {
-    title.textContent = "Import point values for Hour " + hour;
-  }
+  if (title) title.textContent = "Import point values for Hour " + hour;
 
   const savedForHour = questionLogCachedQuestions
-    .filter(function (q) {
-      return Number(q.hour) === hour;
-    })
+    .filter(function (q) { return Number(q.hour) === hour; })
     .slice()
     .sort(function (a, b) {
       return Number(a.question_number) - Number(b.question_number);
     });
-
-  const detectionsByQn = new Map();
-  for (const det of detections) {
-    detectionsByQn.set(Number(det.question_number), det);
+  const savedQns = new Set(savedForHour.map(function (q) {
+    return Number(q.question_number);
+  }));
+  const detectionByQn = new Map();
+  for (const d of detections) {
+    detectionByQn.set(Number(d.question_number), d);
   }
 
-  let matchedCount = 0;
-  for (const existing of savedForHour) {
-    const qn = Number(existing.question_number);
-    const det = detectionsByQn.get(qn) || null;
-    if (det) matchedCount += 1;
-    pointValuesModalRowsEl.appendChild(
-      buildAnchoredPointValuesModalRow(existing, det)
-    );
-  }
-
-  const savedQnSet = new Set(
-    savedForHour.map(function (q) {
-      return Number(q.question_number);
-    })
-  );
-  const extras = detections.filter(function (d) {
-    return !savedQnSet.has(Number(d.question_number));
+  const anchoredModels = savedForHour.map(function (q) {
+    const qn = Number(q.question_number);
+    const det = detectionByQn.get(qn) || null;
+    return {
+      kind: "anchored",
+      qn: qn,
+      text: q.text,
+      prevPts: Number(q.point_value) || 0,
+      detectedPts: det ? det.points : null,
+      hour: hour,
+    };
   });
+  const extraModels = detections
+    .filter(function (d) { return !savedQns.has(Number(d.question_number)); })
+    .map(function (d) {
+      return {
+        kind: "extra",
+        qn: Number(d.question_number),
+        text: "",
+        prevPts: 0,
+        detectedPts: d.points,
+        hour: hour,
+      };
+    });
 
-  if (extras.length > 0) {
+  const rows = [];
+  for (const model of anchoredModels) {
+    const row = buildPointValuesRow(model);
+    rows.push(row);
+    pointValuesModalRowsEl.appendChild(row);
+  }
+  if (extraModels.length > 0) {
     const heading = document.createElement("p");
     heading.className = "point-values-extras-heading";
     heading.textContent = "Detected but not saved";
     pointValuesModalRowsEl.appendChild(heading);
-    for (const det of extras) {
-      pointValuesModalRowsEl.appendChild(
-        buildExtraPointValuesModalRow(det, hour)
-      );
+    for (const model of extraModels) {
+      const row = buildPointValuesRow(model);
+      rows.push(row);
+      pointValuesModalRowsEl.appendChild(row);
     }
   }
 
-  const summaryEl = document.getElementById("pointValuesModalSummary");
-  if (summaryEl) {
-    // Stash the static parser-derived counts so the summary can be refreshed
-    // on every input change without re-deriving them. Overwrites are scanned
-    // live from row state (they can flip when the user manually types a
-    // value into a row whose prior point_value is non-zero).
-    summaryEl.dataset.matched = String(matchedCount);
-    summaryEl.dataset.expected = String(savedForHour.length);
-    summaryEl.dataset.extras = String(extras.length);
-  }
-  recomputePointValuesModalSummary();
+  pointValuesModalState = {
+    hour: hour,
+    rows: rows,
+    matched: anchoredModels.reduce(function (n, m) {
+      return n + (m.detectedPts != null ? 1 : 0);
+    }, 0),
+    expected: anchoredModels.length,
+    extrasCount: extraModels.length,
+  };
+  renderPointValuesModalSummary();
 
   pointValuesModalEl.hidden = false;
-  pointValuesModalEl.dataset.targetHour = String(hour);
   document.body.classList.add("is-modal-open");
 }
 
 /**
- * Renders the coverage summary at the top of the modal body. Toggles an
- * ``is-overwrite`` modifier class when any detection would change a saved
- * non-zero point value, so the banner can render in an amber "warning" style
- * without swapping elements.
- *
- * @param {number} matched - Detections that matched a saved question.
- * @param {number} expected - Count of saved questions in the target hour.
- * @param {number} extras - Detections with no matching saved question.
- * @param {number} overwrites - Rows whose detection would change a non-zero saved point value.
- */
-/**
- * Re-reads the modal DOM and repaints the summary banner. Called after every
- * input change so the "N rows would overwrite" count tracks manual typing as
- * well as parser-detected overwrites. Static parser counts (detected, extras)
- * are read from data-* attributes stashed on the summary element at open.
- */
-function recomputePointValuesModalSummary() {
-  const el = document.getElementById("pointValuesModalSummary");
-  if (!el) return;
-  const matched = parseInt(el.dataset.matched || "0", 10) || 0;
-  const expected = parseInt(el.dataset.expected || "0", 10) || 0;
-  const extras = parseInt(el.dataset.extras || "0", 10) || 0;
-  const overwrites = document.querySelectorAll(
-    '#pointValuesModalRows .point-values-row[data-kind="anchored"].is-overwrite'
-  ).length;
-  updatePointValuesModalSummary(matched, expected, extras, overwrites);
-}
-
-function updatePointValuesModalSummary(matched, expected, extras, overwrites) {
-  const el = document.getElementById("pointValuesModalSummary");
-  if (!el) return;
-  const parts = ["Detected " + matched + " of " + expected + "."];
-  if (extras > 0) {
-    parts.push(
-      extras +
-        " extra detection" +
-        (extras === 1 ? "" : "s") +
-        " with no saved question."
-    );
-  }
-  if (overwrites > 0) {
-    parts.push(
-      overwrites +
-        " row" +
-        (overwrites === 1 ? "" : "s") +
-        " will overwrite existing values."
-    );
-  }
-  el.textContent = parts.join(" ");
-  el.classList.toggle("is-overwrite", overwrites > 0);
-}
-
-/**
- * Hides the review modal and clears its content.
+ * Hides the modal, clears its row DOM, and drops the in-memory state.
  */
 function closePointValuesModal() {
   if (!pointValuesModalEl) return;
@@ -716,70 +686,58 @@ function closePointValuesModal() {
     btnPointValuesApply.disabled = false;
     btnPointValuesApply.textContent = "Apply selected";
   }
+  pointValuesModalState = null;
 }
 
 /**
- * Walks the modal rows, upserts checked+valid rows sequentially via POST /api/questions
- * using the existing question's text to keep the upsert safe, and surfaces a summary.
+ * Upserts anchored rows whose Points input has a value; extras and empty
+ * inputs are skipped. Empty input is treated as "skip" (not an error) so a
+ * prior saved ``point_value`` is never silently clobbered.
  */
 async function applyPointValuesFromModal() {
-  if (!pointValuesModalEl || !pointValuesModalRowsEl || !btnPointValuesApply) return;
-  const hour = parseInt(String(pointValuesModalEl.dataset.targetHour || ""), 10);
-  if (!Number.isFinite(hour) || hour < 1 || hour > QUESTION_LOG_MAX_HOUR) {
-    setPointValuesModalFeedback("Could not determine target hour.", "error");
-    return;
-  }
-
-  const rows = pointValuesModalRowsEl.querySelectorAll(".point-values-row");
-  let applied = 0;
-  let skippedMissing = 0;
-  let errors = 0;
+  if (!pointValuesModalState || !btnPointValuesApply) return;
+  const hour = pointValuesModalState.hour;
 
   btnPointValuesApply.disabled = true;
   btnPointValuesApply.textContent = "Applying…";
   setPointValuesModalFeedback("", "");
 
-  for (const row of rows) {
-    if (row.dataset.kind !== "anchored") continue;
+  let applied = 0;
+  let skippedMissing = 0;
+  let errors = 0;
 
-    const qn = parseInt(String(row.dataset.questionNumber || ""), 10);
-    const ptsInput = row.querySelector(".point-values-pts-input");
-    const rawPts = ptsInput ? String(ptsInput.value).trim() : "";
-
-    // Empty points input = user intentionally skipped this row. Do not post
-    // so we preserve any prior point_value already saved for the question.
-    if (rawPts === "") continue;
-
-    const pts = parseInt(rawPts, 10);
-    if (!Number.isFinite(qn) || qn < 1 || !Number.isFinite(pts) || pts < 0) {
+  for (const row of pointValuesModalState.rows) {
+    const model = row._model;
+    if (model.kind !== "anchored") continue;
+    const raw = row._ptsInput.value.trim();
+    if (raw === "") continue;
+    const pts = parseInt(raw, 10);
+    if (!Number.isFinite(pts) || pts < 0) {
       errors += 1;
       continue;
     }
-
+    // Defensive lookup: the shared log could theoretically have changed
+    // between modal open and apply. Count as skipped rather than error.
     const existing = questionLogCachedQuestions.find(function (q) {
-      return Number(q.hour) === hour && Number(q.question_number) === qn;
+      return Number(q.hour) === hour && Number(q.question_number) === model.qn;
     });
     if (!existing) {
       skippedMissing += 1;
       continue;
     }
-
     try {
       const res = await fetch(apiUrl("/api/questions"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           hour: hour,
-          question_number: qn,
+          question_number: model.qn,
           text: existing.text,
           point_value: pts,
         }),
       });
-      if (res.ok) {
-        applied += 1;
-      } else {
-        errors += 1;
-      }
+      if (res.ok) applied += 1;
+      else errors += 1;
     } catch (_) {
       errors += 1;
     }
