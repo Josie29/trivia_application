@@ -47,8 +47,14 @@ const btnSaveToLog       = document.getElementById("btnSaveToLog");
 const captureFeedbackEl  = document.getElementById("captureFeedback");
 const importFeedbackEl   = document.getElementById("importFeedback");
 const questionLogEl = document.getElementById("questionLog");
-const questionLogHourSelectEl = document.getElementById(
-  "questionLogHourSelect"
+const questionLogHourDisplayEl = document.getElementById(
+  "questionLogHourDisplay"
+);
+const questionLogHourPrevBtn = document.getElementById("btnQuestionLogHourPrev");
+const questionLogHourNextBtn = document.getElementById("btnQuestionLogHourNext");
+const questionLogHourJumpEl = document.getElementById("questionLogHourJump");
+const questionLogGoCurrentBtn = document.getElementById(
+  "btnQuestionLogGoCurrent"
 );
 const questionLogPointTotalEl = document.getElementById(
   "questionLogPointTotal"
@@ -842,8 +848,23 @@ function handleImportPointValuesFromSelection() {
 /** Maximum trivia hour supported in the UI and API (long contests). */
 const QUESTION_LOG_MAX_HOUR = 56;
 
+/**
+ * Reserved slot for trivia-stone questions (bonus/special items filed outside
+ * the normal contest flow). Excluded from ``latest-hour`` heuristics so
+ * ``Go to current hour`` targets the real contest frontier, not the stone slot.
+ */
+const QUESTION_LOG_STONE_HOUR = 56;
+
 /** @type {ReturnType<typeof setInterval> | null} */
 let questionLogPollTimer = null;
+
+/**
+ * Flips true after the first refresh has had a chance to auto-land on the latest
+ * hour with a saved question. Keeps the auto-jump a one-shot at page load.
+ *
+ * @type {boolean}
+ */
+let questionLogHasAutoLanded = false;
 
 /** @type {Array<{ hour: number, question_number: number, text: string, updated_at: string, our_answer?: string, actual_answer?: string, point_value?: number, got_correct?: boolean }>} */
 let questionLogCachedQuestions = [];
@@ -930,45 +951,98 @@ function sanitizeQuestionLogSelectedHour(n) {
 }
 
 /**
- * Reads the Show hour control, or falls back to {@link questionLogSelectedHour}.
+ * Returns the hour currently shown in the shared log pager.
  *
  * @returns {number}
  */
 function getQuestionLogSelectedHour() {
-  if (!questionLogHourSelectEl) {
-    return sanitizeQuestionLogSelectedHour(questionLogSelectedHour);
-  }
-  const raw = parseInt(String(questionLogHourSelectEl.value).trim(), 10);
-  return sanitizeQuestionLogSelectedHour(raw);
+  return sanitizeQuestionLogSelectedHour(questionLogSelectedHour);
 }
 
 /**
- * Fills the hour dropdown with Hour 1 … Hour 56 when empty.
+ * Largest contest hour across cached questions, or ``null`` if the log has no
+ * non-stone questions. The trivia-stone slot ({@link QUESTION_LOG_STONE_HOUR}) is
+ * excluded so ``Go to current hour`` and the first-load auto-land target the real
+ * contest frontier rather than bonus/special entries.
+ *
+ * @returns {number | null}
  */
-function ensureQuestionLogHourSelectOptions() {
-  const sel = questionLogHourSelectEl || document.getElementById(
-    "questionLogHourSelect"
-  );
-  if (!sel || sel.options.length >= QUESTION_LOG_MAX_HOUR) {
+function getLatestHourWithQuestion() {
+  const qs = questionLogCachedQuestions || [];
+  let max = null;
+  for (let i = 0; i < qs.length; i += 1) {
+    const h = Number(qs[i].hour);
+    if (!Number.isFinite(h) || h < 1) continue;
+    const hh = Math.floor(h);
+    if (hh === QUESTION_LOG_STONE_HOUR) continue;
+    if (max === null || hh > max) {
+      max = hh;
+    }
+  }
+  return max;
+}
+
+/**
+ * Refreshes the pager display + prev/next/go-current enable states. Called after any
+ * hour change and after each poll refresh so ``Go to current`` tracks live updates.
+ */
+function renderHourPager() {
+  const hour = getQuestionLogSelectedHour();
+  if (questionLogHourDisplayEl) {
+    questionLogHourDisplayEl.innerHTML = "";
+    const srPrefix = document.createElement("span");
+    srPrefix.className = "visually-hidden";
+    srPrefix.textContent = "Hour ";
+    questionLogHourDisplayEl.appendChild(srPrefix);
+    questionLogHourDisplayEl.appendChild(document.createTextNode(String(hour)));
+  }
+  if (questionLogHourPrevBtn) {
+    questionLogHourPrevBtn.disabled = hour <= 1;
+  }
+  if (questionLogHourNextBtn) {
+    questionLogHourNextBtn.disabled = hour >= QUESTION_LOG_MAX_HOUR;
+  }
+  if (questionLogGoCurrentBtn) {
+    const latest = getLatestHourWithQuestion();
+    if (latest === null) {
+      questionLogGoCurrentBtn.disabled = true;
+      questionLogGoCurrentBtn.textContent = "No questions yet";
+      questionLogGoCurrentBtn.title = "No questions saved yet";
+    } else if (latest === hour) {
+      questionLogGoCurrentBtn.disabled = true;
+      questionLogGoCurrentBtn.textContent = "On current hour";
+      questionLogGoCurrentBtn.title =
+        "Hour " + hour + " is the most recent hour with a saved question";
+    } else {
+      questionLogGoCurrentBtn.disabled = false;
+      questionLogGoCurrentBtn.textContent = "Go to current hour";
+      questionLogGoCurrentBtn.title =
+        "Jump to Hour " + latest + " (most recent with a saved question)";
+    }
+  }
+}
+
+/**
+ * Applies a new selected hour and repaints the shared log. No-op when the value is unchanged.
+ *
+ * @param {number} rawHour - Requested hour; will be clamped to 1..{@link QUESTION_LOG_MAX_HOUR}.
+ * @param {{ resetScroll?: boolean }} [options] - Pass ``resetScroll: true`` for user-driven changes so the new hour's list starts at the top.
+ */
+function setQuestionLogSelectedHour(rawHour, options) {
+  const resetScroll = options && options.resetScroll;
+  const next = sanitizeQuestionLogSelectedHour(Number(rawHour));
+  if (next === questionLogSelectedHour) {
+    renderHourPager();
     return;
   }
-  sel.innerHTML = "";
-  for (let h = 1; h <= QUESTION_LOG_MAX_HOUR; h += 1) {
-    const opt = document.createElement("option");
-    opt.value = String(h);
-    opt.textContent = "Hour " + h;
-    sel.appendChild(opt);
+  questionLogScoringDirty = false;
+  questionLogSelectedHour = next;
+  questionLogLastRenderedHour = null;
+  renderHourPager();
+  renderQuestionLogView();
+  if (resetScroll && questionLogEl) {
+    questionLogEl.scrollTop = 0;
   }
-}
-
-/**
- * Syncs the select element with {@link questionLogSelectedHour}.
- */
-function syncQuestionLogHourSelectValue() {
-  if (!questionLogHourSelectEl) return;
-  questionLogHourSelectEl.value = String(
-    sanitizeQuestionLogSelectedHour(questionLogSelectedHour)
-  );
 }
 
 /**
@@ -1541,6 +1615,7 @@ function renderQuestionLogHourSections(byHour, hoursSorted) {
 function renderQuestionLogView() {
   const selectedHour = getQuestionLogSelectedHour();
   questionLogSelectedHour = selectedHour;
+  renderHourPager();
 
   const preserveScroll =
     questionLogLastRenderedHour !== null &&
@@ -1595,17 +1670,33 @@ function renderQuestionLogView() {
   }
 }
 
-/**
- * User picked a different hour—reset scroll to top for the new list.
- */
-function onQuestionLogHourSelectChange() {
-  questionLogScoringDirty = false;
-  questionLogSelectedHour = getQuestionLogSelectedHour();
-  questionLogLastRenderedHour = null;
-  renderQuestionLogView();
-  if (questionLogEl) {
-    questionLogEl.scrollTop = 0;
+/** Prev/next step handlers for the hour pager. */
+function onQuestionLogHourStep(delta) {
+  setQuestionLogSelectedHour(getQuestionLogSelectedHour() + delta, {
+    resetScroll: true,
+  });
+}
+
+/** Commits the ``Jump to`` input; silently ignores blank/invalid values so users can clear and retry. */
+function onQuestionLogHourJumpCommit() {
+  if (!questionLogHourJumpEl) return;
+  const raw = String(questionLogHourJumpEl.value).trim();
+  if (!raw) return;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) {
+    questionLogHourJumpEl.value = "";
+    return;
   }
+  setQuestionLogSelectedHour(parsed, { resetScroll: true });
+  questionLogHourJumpEl.value = "";
+  questionLogHourJumpEl.blur();
+}
+
+/** ``Go to current`` — jump to the hour with the most recently saved question number. */
+function onQuestionLogGoCurrent() {
+  const latest = getLatestHourWithQuestion();
+  if (latest === null) return;
+  setQuestionLogSelectedHour(latest, { resetScroll: true });
 }
 
 /**
@@ -1620,6 +1711,14 @@ async function refreshQuestionLog(options) {
   const data = await res.json();
   questionLogCachedQuestions = data.questions || [];
   updateQuestionLogPointTotal();
+  if (!questionLogHasAutoLanded) {
+    questionLogHasAutoLanded = true;
+    const latest = getLatestHourWithQuestion();
+    if (latest !== null) {
+      questionLogSelectedHour = latest;
+      questionLogLastRenderedHour = null;
+    }
+  }
   if (
     !forceRender &&
     (questionLogScoringDirty ||
@@ -1627,6 +1726,7 @@ async function refreshQuestionLog(options) {
       isPointValuesModalOpen() ||
       isSelectionInsideQuestionLog())
   ) {
+    renderHourPager();
     return;
   }
   renderQuestionLogView();
@@ -1731,7 +1831,8 @@ async function handleSaveToSharedLog() {
       setCaptureFeedback("Saved to shared question log.", "success");
     }
     questionLogSelectedHour = parsed.hour;
-    syncQuestionLogHourSelectValue();
+    questionLogLastRenderedHour = null;
+    renderHourPager();
     await refreshQuestionLog({ forceRender: true });
   } catch (err) {
     setCaptureFeedback("Network error: " + err.message, "error");
@@ -2071,19 +2172,34 @@ async function handleStop() {
   }
 })();
 
-ensureQuestionLogHourSelectOptions();
-syncQuestionLogHourSelectValue();
 questionLogSelectedHour = getQuestionLogSelectedHour();
+renderHourPager();
 
 setupQuestionLogScoringDirtyTracking();
 refreshQuestionLog().catch(function () {});
 startQuestionLogPolling();
 
-if (questionLogHourSelectEl) {
-  questionLogHourSelectEl.addEventListener(
-    "change",
-    onQuestionLogHourSelectChange
-  );
+if (questionLogHourPrevBtn) {
+  questionLogHourPrevBtn.addEventListener("click", function () {
+    onQuestionLogHourStep(-1);
+  });
+}
+if (questionLogHourNextBtn) {
+  questionLogHourNextBtn.addEventListener("click", function () {
+    onQuestionLogHourStep(1);
+  });
+}
+if (questionLogHourJumpEl) {
+  questionLogHourJumpEl.addEventListener("change", onQuestionLogHourJumpCommit);
+  questionLogHourJumpEl.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onQuestionLogHourJumpCommit();
+    }
+  });
+}
+if (questionLogGoCurrentBtn) {
+  questionLogGoCurrentBtn.addEventListener("click", onQuestionLogGoCurrent);
 }
 
 btnStart.addEventListener("click", handleStart);
