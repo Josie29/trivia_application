@@ -848,6 +848,13 @@ function handleImportPointValuesFromSelection() {
 /** Maximum trivia hour supported in the UI and API (long contests). */
 const QUESTION_LOG_MAX_HOUR = 56;
 
+/**
+ * Reserved slot for trivia-stone questions (bonus/special items filed outside
+ * the normal contest flow). Excluded from ``latest-hour`` heuristics so
+ * ``Go to current hour`` targets the real contest frontier, not the stone slot.
+ */
+const QUESTION_LOG_STONE_HOUR = 56;
+
 /** @type {ReturnType<typeof setInterval> | null} */
 let questionLogPollTimer = null;
 
@@ -953,7 +960,10 @@ function getQuestionLogSelectedHour() {
 }
 
 /**
- * Largest hour across cached questions, or ``null`` if the log is empty.
+ * Largest contest hour across cached questions, or ``null`` if the log has no
+ * non-stone questions. The trivia-stone slot ({@link QUESTION_LOG_STONE_HOUR}) is
+ * excluded so ``Go to current hour`` and the first-load auto-land target the real
+ * contest frontier rather than bonus/special entries.
  *
  * @returns {number | null}
  */
@@ -964,6 +974,7 @@ function getLatestHourWithQuestion() {
     const h = Number(qs[i].hour);
     if (!Number.isFinite(h) || h < 1) continue;
     const hh = Math.floor(h);
+    if (hh === QUESTION_LOG_STONE_HOUR) continue;
     if (max === null || hh > max) {
       max = hh;
     }
