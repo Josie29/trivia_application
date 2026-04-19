@@ -1172,9 +1172,7 @@ body.is-modal-open { overflow: hidden; }
 
 .point-values-row {
   display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 0.75rem;
+  grid-template-columns: 1fr;
   row-gap: 0.25rem;
   padding: 0.75rem;
   border: 1px solid var(--color-border);
@@ -1196,21 +1194,6 @@ body.is-modal-open { overflow: hidden; }
   background: color-mix(in srgb, var(--color-secondary) 12%, var(--color-surface));
   border-color: color-mix(in srgb, var(--color-secondary) 45%, var(--color-border));
 }
-
-.point-values-row-context.is-overwrite {
-  color: var(--color-secondary-hover);
-  font-weight: 600;
-}
-
-.point-values-row-apply {
-  grid-row: 1 / span 2;
-  align-self: center;
-  width: 1.125rem;
-  height: 1.125rem;
-  cursor: pointer;
-}
-
-.point-values-row-apply:disabled { cursor: not-allowed; }
 
 .point-values-row-fields {
   display: flex;
@@ -1249,15 +1232,36 @@ body.is-modal-open { overflow: hidden; }
   color: var(--color-text);
 }
 
-.point-values-row-context {
+.point-values-row-context-wrap {
   grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.point-values-row-context {
   margin: 0;
   font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   word-break: break-word;
 }
 
-.point-values-row-context.is-missing {
+.point-values-row-status {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.point-values-row-status[hidden] { display: none; }
+
+.point-values-row-status.is-overwrite {
+  color: var(--color-secondary-hover);
+  font-weight: 600;
+}
+
+.point-values-row-status.is-missing {
   color: var(--color-error);
 }
 
@@ -1322,16 +1326,12 @@ body.is-modal-open { overflow: hidden; }
 
 @media (min-width: 40rem) {
   .point-values-row {
-    grid-template-columns: auto auto 1fr;
-    grid-template-rows: auto;
+    grid-template-columns: auto 1fr;
+    column-gap: 1rem;
     align-items: center;
   }
 
-  .point-values-row-apply {
-    grid-row: 1;
-  }
-
-  .point-values-row-context {
-    grid-column: 3;
+  .point-values-row-context-wrap {
+    grid-column: 2;
   }
 }

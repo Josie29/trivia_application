@@ -408,30 +408,12 @@ function buildAnchoredPointValuesModalRow(existing, detection) {
   const qn = Number(existing.question_number);
   const prevPts = Number(existing.point_value);
   const hasPrev = Number.isFinite(prevPts) && prevPts > 0;
-  // Only call it an overwrite when a detection would actually *change* a
-  // saved non-zero value. Detection == prev is a no-op; no warning needed.
-  const willOverwrite = !!(detection && hasPrev && prevPts !== detection.points);
 
   const row = document.createElement("div");
   row.className = "point-values-row";
   row.dataset.kind = "anchored";
   row.dataset.questionNumber = String(qn);
   row.setAttribute("role", "listitem");
-  if (!detection) {
-    row.classList.add("is-empty");
-  }
-  if (willOverwrite) {
-    row.classList.add("is-overwrite");
-    row.dataset.overwrite = "1";
-  }
-
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.className = "point-values-row-apply";
-  // Default unchecked for overwrites so a re-import does not clobber prior
-  // point values on one wrong click. User must explicitly tick to confirm.
-  cb.checked = !!detection && !willOverwrite;
-  cb.setAttribute("aria-label", "Apply Q" + qn);
 
   const fields = document.createElement("div");
   fields.className = "point-values-row-fields";
@@ -462,44 +444,68 @@ function buildAnchoredPointValuesModalRow(existing, detection) {
   if (!detection) {
     ptsInput.placeholder = "—";
   }
-  // Treat typing a value as intent to apply: sync the checkbox automatically
-  // so the user does not have to also tick the box for manually filled rows.
-  // Clearing the input flips the checkbox off, matching the "skip" semantics.
-  ptsInput.addEventListener("input", function () {
-    cb.checked = ptsInput.value.trim() !== "";
-  });
   ptsGroup.appendChild(ptsLabel);
   ptsGroup.appendChild(ptsInput);
 
   fields.appendChild(qnGroup);
   fields.appendChild(ptsGroup);
 
+  const contextWrap = document.createElement("div");
+  contextWrap.className = "point-values-row-context-wrap";
+
   const context = document.createElement("p");
   context.className = "point-values-row-context";
-  if (willOverwrite) {
-    context.classList.add("is-overwrite");
-  }
-  const prevLabel = hasPrev ? prevPts + " pts" : "no points yet";
-  const bodyText = existing.text ? existing.text + "  (" + prevLabel + ")" : "(" + prevLabel + ")";
-  if (willOverwrite) {
-    context.textContent =
-      "Will overwrite " + prevPts + " pts with " + detection.points + " — tick the box to confirm. " + bodyText;
-  } else if (detection) {
-    context.textContent = bodyText;
-  } else {
-    context.textContent = "Not detected — enter manually. " + bodyText;
+  context.textContent = existing.text || "(no question text saved)";
+  contextWrap.appendChild(context);
+
+  // Subordinate status line: surfaced only when there is something actionable
+  // (an overwrite warning). Stays hidden for empty rows and plain detections
+  // so default rows collapse to a single line.
+  const status = document.createElement("p");
+  status.className = "point-values-row-status";
+  status.hidden = true;
+  contextWrap.appendChild(status);
+
+  // Single source of truth for the row's visual state. Called at init and
+  // on every input change. Keeps the amber warning, the auto-tick, and the
+  // status line in sync whether the value came from the parser or typing.
+  function reconcileRowState() {
+    const raw = ptsInput.value.trim();
+    const parsed = raw === "" ? NaN : parseInt(raw, 10);
+    const hasTyped = raw !== "" && Number.isFinite(parsed);
+    const isOverwrite = hasTyped && hasPrev && parsed !== prevPts;
+
+    row.classList.toggle("is-empty", !hasTyped);
+    row.classList.toggle("is-overwrite", isOverwrite);
+    row.dataset.overwrite = isOverwrite ? "1" : "";
+
+    if (isOverwrite) {
+      status.hidden = false;
+      status.className = "point-values-row-status is-overwrite";
+      status.textContent =
+        "Will overwrite " + prevPts + " pts with " + parsed + ".";
+    } else {
+      status.hidden = true;
+      status.textContent = "";
+      status.className = "point-values-row-status";
+    }
   }
 
-  row.appendChild(cb);
+  ptsInput.addEventListener("input", function () {
+    reconcileRowState();
+    recomputePointValuesModalSummary();
+  });
+  reconcileRowState();
+
   row.appendChild(fields);
-  row.appendChild(context);
+  row.appendChild(contextWrap);
   return row;
 }
 
 /**
  * Builds an informational row for a detection whose question number does not
  * match any saved question in the target hour. These rows cannot be applied
- * without saving the underlying question first; the checkbox stays disabled.
+ * without saving the underlying question first; they render as read-only info.
  *
  * @param {{question_number: number, points: number, raw_match: string}} detection
  * @param {number} hour
@@ -511,13 +517,6 @@ function buildExtraPointValuesModalRow(detection, hour) {
   row.dataset.kind = "extra";
   row.dataset.questionNumber = String(detection.question_number);
   row.setAttribute("role", "listitem");
-
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.className = "point-values-row-apply";
-  cb.checked = false;
-  cb.disabled = true;
-  cb.setAttribute("aria-label", "Q" + detection.question_number + " not saved");
 
   const fields = document.createElement("div");
   fields.className = "point-values-row-fields";
@@ -547,18 +546,26 @@ function buildExtraPointValuesModalRow(detection, hour) {
   fields.appendChild(qnGroup);
   fields.appendChild(ptsGroup);
 
+  const contextWrap = document.createElement("div");
+  contextWrap.className = "point-values-row-context-wrap";
+
   const context = document.createElement("p");
-  context.className = "point-values-row-context is-missing";
-  context.textContent =
-    "No saved question for Hour " +
+  context.className = "point-values-row-context";
+  context.textContent = "(no saved question)";
+  contextWrap.appendChild(context);
+
+  const status = document.createElement("p");
+  status.className = "point-values-row-status is-missing";
+  status.textContent =
+    "Save Hour " +
     hour +
     " Q" +
     detection.question_number +
-    " — save the question first, then re-run the import.";
+    " first, then re-run the import.";
+  contextWrap.appendChild(status);
 
-  row.appendChild(cb);
   row.appendChild(fields);
-  row.appendChild(context);
+  row.appendChild(contextWrap);
   return row;
 }
 
@@ -596,15 +603,10 @@ function openPointValuesModal(detections) {
   }
 
   let matchedCount = 0;
-  let overwriteCount = 0;
   for (const existing of savedForHour) {
     const qn = Number(existing.question_number);
     const det = detectionsByQn.get(qn) || null;
     if (det) matchedCount += 1;
-    const prev = Number(existing.point_value);
-    if (det && Number.isFinite(prev) && prev > 0 && prev !== det.points) {
-      overwriteCount += 1;
-    }
     pointValuesModalRowsEl.appendChild(
       buildAnchoredPointValuesModalRow(existing, det)
     );
@@ -631,12 +633,17 @@ function openPointValuesModal(detections) {
     }
   }
 
-  updatePointValuesModalSummary(
-    matchedCount,
-    savedForHour.length,
-    extras.length,
-    overwriteCount
-  );
+  const summaryEl = document.getElementById("pointValuesModalSummary");
+  if (summaryEl) {
+    // Stash the static parser-derived counts so the summary can be refreshed
+    // on every input change without re-deriving them. Overwrites are scanned
+    // live from row state (they can flip when the user manually types a
+    // value into a row whose prior point_value is non-zero).
+    summaryEl.dataset.matched = String(matchedCount);
+    summaryEl.dataset.expected = String(savedForHour.length);
+    summaryEl.dataset.extras = String(extras.length);
+  }
+  recomputePointValuesModalSummary();
 
   pointValuesModalEl.hidden = false;
   pointValuesModalEl.dataset.targetHour = String(hour);
@@ -654,6 +661,24 @@ function openPointValuesModal(detections) {
  * @param {number} extras - Detections with no matching saved question.
  * @param {number} overwrites - Rows whose detection would change a non-zero saved point value.
  */
+/**
+ * Re-reads the modal DOM and repaints the summary banner. Called after every
+ * input change so the "N rows would overwrite" count tracks manual typing as
+ * well as parser-detected overwrites. Static parser counts (detected, extras)
+ * are read from data-* attributes stashed on the summary element at open.
+ */
+function recomputePointValuesModalSummary() {
+  const el = document.getElementById("pointValuesModalSummary");
+  if (!el) return;
+  const matched = parseInt(el.dataset.matched || "0", 10) || 0;
+  const expected = parseInt(el.dataset.expected || "0", 10) || 0;
+  const extras = parseInt(el.dataset.extras || "0", 10) || 0;
+  const overwrites = document.querySelectorAll(
+    '#pointValuesModalRows .point-values-row[data-kind="anchored"].is-overwrite'
+  ).length;
+  updatePointValuesModalSummary(matched, expected, extras, overwrites);
+}
+
 function updatePointValuesModalSummary(matched, expected, extras, overwrites) {
   const el = document.getElementById("pointValuesModalSummary");
   if (!el) return;
@@ -671,7 +696,7 @@ function updatePointValuesModalSummary(matched, expected, extras, overwrites) {
       overwrites +
         " row" +
         (overwrites === 1 ? "" : "s") +
-        " would overwrite existing values — tick to confirm."
+        " will overwrite existing values."
     );
   }
   el.textContent = parts.join(" ");
@@ -716,9 +741,6 @@ async function applyPointValuesFromModal() {
 
   for (const row of rows) {
     if (row.dataset.kind !== "anchored") continue;
-
-    const cb = row.querySelector(".point-values-row-apply");
-    if (!cb || !cb.checked) continue;
 
     const qn = parseInt(String(row.dataset.questionNumber || ""), 10);
     const ptsInput = row.querySelector(".point-values-pts-input");
