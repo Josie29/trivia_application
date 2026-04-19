@@ -547,6 +547,50 @@ button.is-loading::before {
   color: var(--color-text-muted);
 }
 
+.question-log-toolbar-import-row {
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.question-log-import-btn {
+  font: inherit;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.question-log-import-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.question-log-import-btn:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+.question-log-import-feedback {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.question-log-import-feedback[hidden] { display: none; }
+
+.question-log-import-feedback.is-error {
+  color: var(--color-error);
+}
+
+.question-log-import-feedback.is-success {
+  color: var(--color-success);
+}
+
 .question-log-select {
   font: inherit;
   padding: 0.25rem 0.4rem;
@@ -1102,6 +1146,11 @@ body.is-modal-open { overflow: hidden; }
 
 .point-values-modal-summary:empty { display: none; }
 
+.point-values-modal-summary.is-overwrite {
+  background: color-mix(in srgb, var(--color-secondary) 18%, var(--color-surface));
+  color: var(--color-secondary-hover);
+}
+
 .point-values-extras-heading {
   margin: 0.75rem 0 0.25rem;
   padding-top: 0.75rem;
@@ -1123,9 +1172,7 @@ body.is-modal-open { overflow: hidden; }
 
 .point-values-row {
   display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 0.75rem;
+  grid-template-columns: 1fr;
   row-gap: 0.25rem;
   padding: 0.75rem;
   border: 1px solid var(--color-border);
@@ -1143,15 +1190,10 @@ body.is-modal-open { overflow: hidden; }
   border-color: color-mix(in srgb, var(--color-error) 25%, var(--color-border));
 }
 
-.point-values-row-apply {
-  grid-row: 1 / span 2;
-  align-self: center;
-  width: 1.125rem;
-  height: 1.125rem;
-  cursor: pointer;
+.point-values-row.is-overwrite {
+  background: color-mix(in srgb, var(--color-secondary) 12%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-secondary) 45%, var(--color-border));
 }
-
-.point-values-row-apply:disabled { cursor: not-allowed; }
 
 .point-values-row-fields {
   display: flex;
@@ -1190,15 +1232,36 @@ body.is-modal-open { overflow: hidden; }
   color: var(--color-text);
 }
 
-.point-values-row-context {
+.point-values-row-context-wrap {
   grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.point-values-row-context {
   margin: 0;
   font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   word-break: break-word;
 }
 
-.point-values-row-context.is-missing {
+.point-values-row-status {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.point-values-row-status[hidden] { display: none; }
+
+.point-values-row-status.is-overwrite {
+  color: var(--color-secondary-hover);
+  font-weight: 600;
+}
+
+.point-values-row-status.is-missing {
   color: var(--color-error);
 }
 
@@ -1263,16 +1326,12 @@ body.is-modal-open { overflow: hidden; }
 
 @media (min-width: 40rem) {
   .point-values-row {
-    grid-template-columns: auto auto 1fr;
-    grid-template-rows: auto;
+    grid-template-columns: auto 1fr;
+    column-gap: 1rem;
     align-items: center;
   }
 
-  .point-values-row-apply {
-    grid-row: 1;
-  }
-
-  .point-values-row-context {
-    grid-column: 3;
+  .point-values-row-context-wrap {
+    grid-column: 2;
   }
 }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trivia AI — Live Stream Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=27" />
 </head>
 <body>
 
@@ -90,7 +90,6 @@
         <p id="captureFeedback" class="capture-feedback" role="status" aria-live="polite" hidden></p>
         <div class="question-actions">
           <button type="button" id="btnUseSelection">Use selection as question</button>
-          <button type="button" id="btnImportPointValues">Import point values from selection</button>
           <button type="button" id="btnSaveToLog" class="btn-save-log">Save to shared log</button>
         </div>
       </section>
@@ -112,6 +111,11 @@
           <select id="questionLogHourSelect" class="question-log-hour-select" aria-describedby="question-log-hour-help"></select>
           <span id="question-log-hour-help" class="question-log-hour-help">Contest hours 1–56</span>
         </div>
+        <div class="question-log-toolbar-row question-log-toolbar-import-row">
+          <button type="button" id="btnImportPointValues" class="question-log-import-btn">Import point values from transcript selection</button>
+          <span class="question-log-hour-help">Applies to the hour shown above.</span>
+        </div>
+        <p id="importFeedback" class="question-log-import-feedback" role="status" aria-live="polite" hidden></p>
       </div>
       <div id="questionLog" class="question-log" role="region" aria-label="Saved questions for all viewers"></div>
       <footer class="question-log-total-footer" aria-label="Contest points total">
@@ -129,7 +133,7 @@
         <h2 id="pointValuesModalTitle" class="point-values-modal-title">Import point values</h2>
         <button type="button" class="point-values-modal-close" data-close-modal aria-label="Close dialog">&times;</button>
       </header>
-      <p class="point-values-modal-hint">One row per saved question in this hour. Detected points fill in automatically; type into empty rows to fill gaps, or uncheck to skip.</p>
+      <p class="point-values-modal-hint">One row per saved question in this hour. Detected points fill in automatically; type into empty rows to fill gaps, or clear the input to skip.</p>
       <p id="pointValuesModalSummary" class="point-values-modal-summary" role="status" aria-live="polite"></p>
       <div id="pointValuesModalRows" class="point-values-modal-rows" role="list"></div>
       <p id="pointValuesModalFeedback" class="point-values-modal-feedback" role="status" aria-live="polite" hidden></p>
@@ -140,7 +144,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <script src="config.js?v=27"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>
