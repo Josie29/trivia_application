@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trivia AI — Live Stream Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=30" />
+  <link rel="stylesheet" href="styles.css?v=38" />
 </head>
 <body>
 
@@ -116,9 +116,15 @@
       </p>
       <div class="question-log-toolbar" aria-label="Choose trivia hour">
         <div class="question-log-toolbar-row question-log-toolbar-hour-row">
-          <label class="question-log-toolbar-label" for="questionLogHourSelect">Show hour</label>
-          <select id="questionLogHourSelect" class="question-log-hour-select" aria-describedby="question-log-hour-help"></select>
-          <span id="question-log-hour-help" class="question-log-hour-help">Contest hours 1–56</span>
+          <span class="question-log-toolbar-label" id="questionLogHourPagerLabel">Show hour</span>
+          <div class="question-log-hour-pager" role="group" aria-labelledby="questionLogHourPagerLabel">
+            <button type="button" id="btnQuestionLogHourPrev" class="question-log-hour-step" aria-label="Previous hour">&lsaquo;</button>
+            <span id="questionLogHourDisplay" class="question-log-hour-display" aria-live="polite"><span class="visually-hidden">Hour </span>1</span>
+            <button type="button" id="btnQuestionLogHourNext" class="question-log-hour-step" aria-label="Next hour">&rsaquo;</button>
+          </div>
+          <span class="question-log-hour-jump-label" id="questionLogHourJumpLabel">Jump to</span>
+          <input id="questionLogHourJump" class="question-log-hour-jump-input" type="number" inputmode="numeric" min="1" max="56" placeholder="1–56" autocomplete="off" aria-labelledby="questionLogHourJumpLabel" />
+          <button type="button" id="btnQuestionLogGoCurrent" class="question-log-hour-go-current" disabled>Go to current hour</button>
         </div>
         <div class="question-log-toolbar-row question-log-toolbar-import-row">
           <button type="button" id="btnImportPointValues" class="question-log-import-btn">Import point values from transcript selection</button>
@@ -153,7 +159,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+  <script src="config.js?v=38"></script>
+  <script src="app.js?v=38"></script>
 </body>
 </html>
