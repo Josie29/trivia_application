@@ -30,6 +30,8 @@ class QuestionLogRow(Base):
     actual_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     point_value: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     got_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    # NULL = auto (got_correct is derived from answer match); TRUE/FALSE = user-set override.
+    got_correct_override: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
 
 def normalize_database_url(url: str) -> str:
@@ -110,6 +112,11 @@ def migrate_question_log_columns(engine: Engine) -> None:
             ddl.append(
                 "ALTER TABLE question_log ADD COLUMN got_correct BOOLEAN NOT NULL DEFAULT FALSE"
             )
+    if "got_correct_override" not in have:
+        if is_sqlite:
+            ddl.append("ALTER TABLE question_log ADD COLUMN got_correct_override INTEGER")
+        else:
+            ddl.append("ALTER TABLE question_log ADD COLUMN got_correct_override BOOLEAN")
     if not ddl:
         return
     with engine.begin() as conn:

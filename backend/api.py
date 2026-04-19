@@ -334,6 +334,7 @@ def create_app() -> FastAPI:
                     actual_answer=e.actual_answer,
                     point_value=e.point_value,
                     got_correct=e.got_correct,
+                    got_correct_override=e.got_correct_override,
                 )
                 for e in rows
             ],
@@ -356,6 +357,7 @@ def create_app() -> FastAPI:
             our_answer=body.our_answer,
             actual_answer=body.actual_answer,
             point_value=body.point_value,
+            correctness_mode=body.correctness_mode,
         )
         return UpsertQuestionResponse(
             overwritten=overwritten,
@@ -368,6 +370,7 @@ def create_app() -> FastAPI:
                 actual_answer=entry.actual_answer,
                 point_value=entry.point_value,
                 got_correct=entry.got_correct,
+                got_correct_override=entry.got_correct_override,
             ),
         )
 

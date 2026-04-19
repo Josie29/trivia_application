@@ -16,6 +16,7 @@ from question_log_db import (
     make_session_factory,
 )
 from question_log_scoring import compute_got_correct
+from schemas import CorrectnessMode
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -42,6 +43,7 @@ class LoggedQuestionEntry:
     actual_answer: str
     point_value: int
     got_correct: bool
+    got_correct_override: bool | None = None
 
 
 def _merge_str(
@@ -132,13 +134,21 @@ def clear() -> None:
                 session.commit()
 
 
+def _effective_got_correct(our: str, actual: str, override: bool | None) -> bool:
+    """Honor override when set, otherwise derive from answer match."""
+
+    if override is not None:
+        return bool(override)
+    return compute_got_correct(our, actual)
+
+
 def _row_to_entry(r: QuestionLogRow) -> LoggedQuestionEntry:
-    """Map ORM row to API entry with normalized strings and recomputed correctness."""
+    """Map ORM row to API entry with normalized strings and effective correctness."""
 
     our = (r.our_answer or "").strip()
     actual = (r.actual_answer or "").strip()
     pts = int(r.point_value or 0)
-    gc = compute_got_correct(our, actual)
+    override = r.got_correct_override
     return LoggedQuestionEntry(
         hour=r.hour,
         question_number=r.question_number,
@@ -147,7 +157,8 @@ def _row_to_entry(r: QuestionLogRow) -> LoggedQuestionEntry:
         our_answer=our,
         actual_answer=actual,
         point_value=pts,
-        got_correct=gc,
+        got_correct=_effective_got_correct(our, actual, override),
+        got_correct_override=override,
     )
 
 
@@ -172,6 +183,29 @@ def list_sorted() -> list[LoggedQuestionEntry]:
     return [_row_to_entry(r) for r in rows]
 
 
+def _resolve_override(
+    mode: Optional[CorrectnessMode],
+    prev_override: bool | None,
+) -> bool | None:
+    """Map incoming correctness_mode to the new stored override value.
+
+    Args:
+        mode: Client intent; ``None`` preserves the existing override.
+        prev_override: Current stored override (``None`` means auto).
+
+    Returns:
+        New override value (``None`` for auto).
+    """
+
+    if mode is None:
+        return prev_override
+    if mode is CorrectnessMode.AUTO:
+        return None
+    if mode is CorrectnessMode.CORRECT:
+        return True
+    return False
+
+
 def upsert(
     hour: int,
     question_number: int,
@@ -180,6 +214,7 @@ def upsert(
     our_answer: Optional[str] = None,
     actual_answer: Optional[str] = None,
     point_value: Optional[int] = None,
+    correctness_mode: Optional[CorrectnessMode] = None,
 ) -> tuple[bool, LoggedQuestionEntry]:
     """Insert or replace the question for (hour, question_number).
 
@@ -192,6 +227,8 @@ def upsert(
         our_answer: Team answer text, or ``None`` to preserve prior.
         actual_answer: Correct answer text, or ``None`` to preserve prior.
         point_value: Points for this question, or ``None`` to preserve prior.
+        correctness_mode: Override intent — ``None`` preserves existing override;
+            ``AUTO`` clears it (recompute from answers); ``CORRECT``/``INCORRECT`` pins it.
 
     Returns:
         Tuple of (whether an existing row was replaced, the stored entry).
@@ -209,10 +246,12 @@ def upsert(
             prev_our = prev.our_answer if prev else ""
             prev_actual = prev.actual_answer if prev else ""
             prev_pts = prev.point_value if prev else 0
+            prev_override = prev.got_correct_override if prev else None
             final_our = _merge_str(our_answer, prev_our)
             final_actual = _merge_str(actual_answer, prev_actual)
             final_pts = _merge_points(point_value, prev_pts)
-            gc = compute_got_correct(final_our, final_actual)
+            final_override = _resolve_override(correctness_mode, prev_override)
+            gc = _effective_got_correct(final_our, final_actual, final_override)
             overwritten = key in _memory
             entry = LoggedQuestionEntry(
                 hour=hour,
@@ -223,6 +262,7 @@ def upsert(
                 actual_answer=final_actual,
                 point_value=final_pts,
                 got_correct=gc,
+                got_correct_override=final_override,
             )
             _memory[key] = entry
         return overwritten, entry
@@ -240,23 +280,27 @@ def upsert(
             prev_our = (existing.our_answer or "").strip()
             prev_actual = (existing.actual_answer or "").strip()
             prev_pts = int(existing.point_value or 0)
+            prev_override = existing.got_correct_override
             final_our = _merge_str(our_answer, prev_our)
             final_actual = _merge_str(actual_answer, prev_actual)
             final_pts = _merge_points(point_value, prev_pts)
-            gc = compute_got_correct(final_our, final_actual)
+            final_override = _resolve_override(correctness_mode, prev_override)
+            gc = _effective_got_correct(final_our, final_actual, final_override)
             existing.text = stripped
             existing.updated_at = now
             existing.our_answer = final_our or None
             existing.actual_answer = final_actual or None
             existing.point_value = final_pts
             existing.got_correct = gc
+            existing.got_correct_override = final_override
             session.commit()
             session.refresh(existing)
             return overwritten, _row_to_entry(existing)
         final_our = _merge_str(our_answer, "")
         final_actual = _merge_str(actual_answer, "")
         final_pts = _merge_points(point_value, 0)
-        gc = compute_got_correct(final_our, final_actual)
+        final_override = _resolve_override(correctness_mode, None)
+        gc = _effective_got_correct(final_our, final_actual, final_override)
         new_row = QuestionLogRow(
             hour=hour,
             question_number=question_number,
@@ -266,6 +310,7 @@ def upsert(
             actual_answer=final_actual or None,
             point_value=final_pts,
             got_correct=gc,
+            got_correct_override=final_override,
         )
         session.add(new_row)
         session.commit()
