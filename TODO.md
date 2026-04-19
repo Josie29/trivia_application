@@ -13,12 +13,6 @@
 - [ ] Maintain session state during pause
 - [ ] Preserve current transcription and question log on pause
 
-### 3. Question Editing
-- [ ] Add edit functionality to saved questions
-- [ ] Allow editing: question text, answer, correctness status, points
-- [ ] Update UI to show edit buttons for each question row
-- [ ] Persist edits to database
-
 ## Bugs / Investigations
 
 ## Tech Debt

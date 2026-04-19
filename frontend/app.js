@@ -158,10 +158,45 @@ let audioWindowSeconds = DEFAULT_AUDIO_WINDOW_SECONDS;
 /** Wall time of the previous transcript chunk (for pause detection). */
 let lastTranscriptChunkAt = null;
 
+const btnJumpToLatest = document.getElementById("btnJumpToLatest");
+
+// Browser scroll math is sub-pixel; a few px of slack covers rounding.
+const TRANSCRIPT_STICK_TOLERANCE_PX = 4;
+
+function isTranscriptAtBottom() {
+  const gap =
+    transcriptEl.scrollHeight - transcriptEl.scrollTop - transcriptEl.clientHeight;
+  return gap <= TRANSCRIPT_STICK_TOLERANCE_PX;
+}
+
+function scrollTranscriptToBottom() {
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+function setJumpToLatestVisible(visible) {
+  if (!btnJumpToLatest) return;
+  btnJumpToLatest.hidden = !visible;
+}
+
 function clearTranscript() {
   transcriptEl.textContent = "";
   lastTranscriptChunkAt = null;
+  setJumpToLatestVisible(false);
 }
+
+if (btnJumpToLatest) {
+  btnJumpToLatest.addEventListener("click", function () {
+    scrollTranscriptToBottom();
+    setJumpToLatestVisible(false);
+  });
+}
+
+// Hide the pill once the user reaches the bottom on their own.
+transcriptEl.addEventListener("scroll", function () {
+  if (isTranscriptAtBottom()) {
+    setJumpToLatestVisible(false);
+  }
+});
 
 /**
  * Appends a transcript segment. Normal chunks use a space when the next chunk
@@ -175,6 +210,7 @@ function appendTranscript(text) {
   if (!chunk) return;
   const isNoAudioMarker = chunk === NO_AUDIO_CHUNK_TEXT;
   const now = Date.now();
+  const wasAtBottom = isTranscriptAtBottom();
 
   if (transcriptEl.textContent.length > 0) {
     const gap = lastTranscriptChunkAt != null ? now - lastTranscriptChunkAt : 0;
@@ -204,7 +240,11 @@ function appendTranscript(text) {
   }
 
   lastTranscriptChunkAt = Date.now();
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  if (wasAtBottom) {
+    scrollTranscriptToBottom();
+  } else {
+    setJumpToLatestVisible(true);
+  }
 }
 
 /**
@@ -1584,11 +1624,23 @@ async function refreshQuestionLog(options) {
     !forceRender &&
     (questionLogScoringDirty ||
       isQuestionLogScoringEditorOpen() ||
-      isPointValuesModalOpen())
+      isPointValuesModalOpen() ||
+      isSelectionInsideQuestionLog())
   ) {
     return;
   }
   renderQuestionLogView();
+}
+
+/** True when the user currently has a non-empty text selection anchored inside the log. */
+function isSelectionInsideQuestionLog() {
+  if (!questionLogEl) return false;
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return false;
+  return (
+    (sel.anchorNode && questionLogEl.contains(sel.anchorNode)) ||
+    (sel.focusNode && questionLogEl.contains(sel.focusNode))
+  );
 }
 
 /**
